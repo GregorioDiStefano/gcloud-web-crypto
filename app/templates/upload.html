@@ -1,0 +1,129 @@
+<html>
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-tagsinput/0.8.0/bootstrap-tagsinput.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-tagsinput/0.8.0/bootstrap-tagsinput-typeahead.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-tagsinput/0.8.0/bootstrap-tagsinput.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/superagent/3.3.1/superagent.min.js"></script>
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+
+  <script>
+  $( document ).ready(function() {
+
+  $(function() { //shorthand document.ready function
+      $('#singlebutton').on('click', function(e) { //use on if jQuery 1.7+
+          e.preventDefault();  //prevent form from submitting
+
+          var form = document.getElementById("uploadForm");
+          var FD  = new FormData(form);
+
+          /*
+          var files = document.getElementById('folderupload').files;
+          var formData = new FormData();
+
+          for (var key in files) {
+              if (files.hasOwnProperty(key) && files[key] instanceof File) {
+                  console.log(key, files[key])
+                  formData.append(key, files[key]);
+              }
+          }
+          */
+
+          superagent.post('http://127.0.0.1:3000/file/')
+          .on('progress', function(e) {
+              console.log(e.path)
+              console.log('Percentage done: ', e.percent);
+          })
+  .send(FD)
+  .end(function(err, response) {
+    //upload done!
+  });
+
+          console.log(FD);
+      });
+  });
+})
+  </script>
+
+</head>
+<body>
+
+
+<form id="uploadForm" class="form-horizontal" action="/file/" method="post" enctype="multipart/form-data">
+<fieldset>
+
+
+<legend>Upload file</legend>
+
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="textinput">Title</label>
+  <div class="col-md-5">
+  <input id="textinput" name="textinput" type="text" placeholder="File title" class="form-control input-md">
+
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="textinput">Description</label>
+  <div class="col-md-5">
+  <input id="textinput" name="textinput" type="text" placeholder="File description" class="form-control input-md">
+  <span class="help-block"> </span>
+  </div>
+
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="filebutton">Files to upload</label>
+  <div class="col-md-4">
+    <input id="filebutton" name="file" class="input-file" type="file" multiple>
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="folderupload">Folder to upload</label>
+  <div class="col-md-4">
+    <input id="folderupload" name="file" class="input-file" type="file" webkitdirectory="" directory="">
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="virtfolder">Folder</label>
+  <div class="col-md-5">
+  <input id="virtfolder" name="virtfolder" type="text" placeholder="Virtual folder" class="form-control input-md">
+  <span class="help-block"></span>
+  </div>
+</div>
+
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="taginput">Tags</label>
+  <div class="col-md-4">
+    <input id="taginput" name="tags" type="text" value="Video, 4K" data-role="tagsinput">
+  </div>
+</div>
+
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="encrypt">Encrypt file</label>
+  <div class="col-md-4">
+    <div class="input-group">
+      <input type="checkbox" name="encrypt" id="checkboxes-0" value="Encrypt file" checked>
+    <p class="help-block">Only the actual file will be encrypted before being stored on Google Cloud Storage. All metadata is stored in plaintext</p>
+    </div>
+
+  </div>
+</div>
+
+
+<div class="form-group">
+  <label class="col-md-4 control-label" for="singlebutton"></label>
+  <div class="col-md-4">
+    <button id="singlebutton" name="singlebutton" class="btn btn-primary">Upload</button>
+  </div>
+</div>
+
+</fieldset>
+</form>
+</body>
+</html>
