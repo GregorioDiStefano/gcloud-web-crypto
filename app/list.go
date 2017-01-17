@@ -1,103 +1,85 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
+	"sync"
 
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
-	"github.com/gin-gonic/gin"
 )
 
-type FileStructure struct {
-	Type     string
-	Path     string
-	FullPath string
-	FileData *gc.File
+type FileSystemStructure struct {
+	ID         int64
+	Type       string
+	Path       string
+	FullPath   string
+	ObjectData interface{}
 }
 
-func pathAlreadyFileStructure(path string, list []FileStructure) bool {
-	for _, b := range list {
-		if b.Path == path {
-			return true
-		}
-	}
-	return false
-}
+const (
+	typeFilename = "filename"
+	typeFolder   = "folder"
+)
 
-func listFileSystem(path string, c *gin.Context) (*[]FileStructure, error) {
-	files, err := gc.FileStructDB.ListFiles(path)
-	fmt.Println(files, err)
-	fs := []FileStructure{}
+func listAllNestedFiles(path string) []gc.File {
+	var nestedFiles []gc.File
+	path = normalizeFolder(filepath.Clean(path))
+
+	folders, _, _ := gc.FileStructDB.ListFolders(path)
+	files, _ := gc.FileStructDB.ListFiles(path)
 
 	for _, f := range files {
-		newFSEntry := FileStructure{
-			Type:     "filename",
-			Path:     f.Filename,
-			FullPath: filepath.Clean(filepath.Join(f.Folder, f.Filename)),
-			FileData: f}
+		nestedFiles = append(nestedFiles, f)
+	}
+
+	var wg sync.WaitGroup
+
+	for _, f := range folders {
+		wg.Add(1)
+		go func(f gc.FolderTree) {
+			defer wg.Done()
+			nestedFiles = append(nestedFiles, listAllNestedFiles(filepath.Join(path, f.Folder))...)
+		}(f)
+	}
+
+	wg.Wait()
+	return nestedFiles
+}
+
+func listFileSystem(path string) ([]FileSystemStructure, error) {
+	path = normalizeFolder(filepath.Clean(path))
+	files, err := gc.FileStructDB.ListFiles(path)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fs := []FileSystemStructure{}
+
+	for _, file := range files {
+		newFSEntry := FileSystemStructure{
+			ID:         0,
+			Type:       typeFilename,
+			Path:       file.Filename,
+			FullPath:   filepath.Clean(filepath.Join(file.Folder, file.Filename)),
+			ObjectData: file}
 		fs = append(fs, newFSEntry)
 	}
 
 	folders, _, err := gc.FileStructDB.ListFolders(path)
-	for _, f := range folders {
-		newFSEntry := FileStructure{
-			Type:     "folder",
-			Path:     f.Folder,
-			FullPath: filepath.Clean(filepath.Join(f.Folder)),
-			FileData: nil}
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, folder := range folders {
+		newFSEntry := FileSystemStructure{
+			ID:         folder.ID,
+			Type:       typeFolder,
+			Path:       normalizeFolder(folder.Folder),
+			FullPath:   normalizeFolder(filepath.Join(path, folder.Folder)),
+			ObjectData: folder}
 		fs = append(fs, newFSEntry)
 	}
 
-	fmt.Println("folders: ", folders)
-	fmt.Println(err)
-
-	return &fs, nil
-	/*
-		fmt.Println("A")
-		files, err := gc.FileStructDB.ListFiles("")
-		fmt.Println("B")
-		fmt.Println(len(files))
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, err.Error())
-			return nil, err
-		}
-
-		fs := []FileStructure{}
-		for _, v := range files {
-			remoteObjectFolder := filepath.Clean(v.Folder)
-			listPath := filepath.Clean(path)
-
-			if !strings.HasSuffix(listPath, "/") {
-				listPath += "/"
-			}
-
-			if !strings.HasSuffix(remoteObjectFolder, "/") {
-				remoteObjectFolder += "/"
-			}
-
-			if listPath == remoteObjectFolder {
-				newFSEntry := FileStructure{Type: "filename",
-					Path:     v.Filename,
-					FullPath: filepath.Clean(filepath.Join(v.Folder, v.Filename)),
-					FileData: v}
-				ok := pathAlreadyFileStructure(v.Filename, fs)
-				if !ok {
-					fs = append(fs, newFSEntry)
-				}
-			} else if strings.HasPrefix(remoteObjectFolder, listPath) {
-				inclosedFolder := strings.TrimPrefix(remoteObjectFolder, listPath)
-				nestedFolder := strings.Split(inclosedFolder, "/")[0]
-				newFSEntry := FileStructure{Type: "folder",
-					Path:     nestedFolder,
-					FullPath: filepath.Clean(filepath.Join(path, nestedFolder)),
-					FileData: v}
-				ok := pathAlreadyFileStructure(nestedFolder, fs)
-				if len(nestedFolder) > 0 && !ok {
-					fs = append(fs, newFSEntry)
-				}
-			}
-		}
-	*/
-	//return nil, nil
+	return fs, nil
 }

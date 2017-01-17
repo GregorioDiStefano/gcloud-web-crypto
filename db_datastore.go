@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/datastore"
-	"github.com/davecgh/go-spew/spew"
 	"golang.org/x/net/context"
 )
 
@@ -49,20 +48,6 @@ func (db *datastoreDB) datastoreKey(id int64) *datastore.Key {
 	return datastore.IDKey("Book", id, nil)
 }
 
-func (db *datastoreDB) DoesFolderExist(parent, folder string) (bool, int64) {
-	ctx := context.Background()
-	encfile := make([]*FolderTree, 0)
-	fmt.Printf("Checking if: parentfolder: %s and folder: %s entry exists\n", parent, folder)
-	q := datastore.NewQuery("FolderStruct").Filter("ParentFolder =", parent).Filter("Folder = ", folder)
-	keys, err := db.client.GetAll(ctx, q, &encfile)
-
-	if len(keys) == 0 || err != nil {
-		return false, 0
-	}
-
-	return true, keys[0].ID
-}
-
 // GetBook retrieves a book by its ID.
 func (db *datastoreDB) GetFile(id string) (*File, error) {
 	ctx := context.Background()
@@ -99,10 +84,10 @@ func (db *datastoreDB) AddFile(b *File) (id int64, err error) {
 	return k.ID, nil
 }
 
-func (db *datastoreDB) ListFiles(path string) ([]*File, error) {
+func (db *datastoreDB) ListFiles(path string) ([]File, error) {
 	ctx := context.Background()
 
-	encfile := make([]*File, 0)
+	encfile := make([]File, 0)
 	q := datastore.NewQuery("FileStruct")
 
 	if path != "" {
@@ -118,52 +103,47 @@ func (db *datastoreDB) ListFiles(path string) ([]*File, error) {
 	return encfile, nil
 }
 
-func (db *datastoreDB) ListFolders(path string) ([]*FolderTree, int64, error) {
+func (db *datastoreDB) ListFolders(path string) ([]FolderTree, int64, error) {
 	ctx := context.Background()
-	encfile := make([]*FolderTree, 0)
+
+	encfile := make([]FolderTree, 0)
 	q := datastore.NewQuery("FolderStruct")
 	var parentFolderKey int64
+
 	if path == "/" {
 		q = q.Filter("ParentFolder = ", "")
 	} else {
-		//spew.Dump(PathToFolderTree(path))
 		for _, ft := range PathToFolderTree(path) {
-			fmt.Println("ParentFolder =", ft.ParentFolder, "Folder = ", ft.Folder)
-
 			q = datastore.NewQuery("FolderStruct").
 				Filter("ParentKey = ", parentFolderKey).
 				Filter("ParentFolder = ", ft.ParentFolder).
 				Filter("Folder = ", ft.Folder).Limit(1)
-			key, err := db.client.GetAll(ctx, q, &encfile)
+			keys, err := db.client.GetAll(ctx, q, &encfile)
+
 			if err != nil {
-				fmt.Println(err)
+				return nil, 0, err
 			}
-			if key == nil || len(key) == 0 {
-				fmt.Println("Directory doesnt exist, returning nil")
+
+			if keys == nil || len(keys) == 0 {
 				return nil, 0, nil
 			}
 
-			parentFolderKey = key[0].ID
-			//spew.Dump(encfile, err)
+			parentFolderKey = keys[0].ID
 		}
 	}
 
-	fmt.Printf("ParentKey = %d\n", parentFolderKey)
 	nq := datastore.NewQuery("FolderStruct").Filter("ParentKey = ", int64(parentFolderKey))
-	encfile2 := make([]*FolderTree, 0)
+	encfile = make([]FolderTree, 0)
 
-	keys, err := db.client.GetAll(ctx, nq, &encfile2)
-	fmt.Println("keys: ", keys)
-	if err != nil {
+	if keys, err := db.client.GetAll(ctx, nq, &encfile); err != nil {
 		return nil, 0, fmt.Errorf("datastoredb: could not list books: %v", err)
+	} else {
+		for index, key := range keys {
+			encfile[index].ID = key.ID
+		}
 	}
 
-	for _, v := range encfile2 {
-		fmt.Println("nested folder")
-		spew.Dump(v)
-	}
-
-	return encfile2, parentFolderKey, nil
+	return encfile, parentFolderKey, nil
 }
 
 func (db *datastoreDB) AddFolder(ft *FolderTree) (int64, error) {
@@ -176,9 +156,9 @@ func (db *datastoreDB) AddFolder(ft *FolderTree) (int64, error) {
 	return key.ID, err
 }
 
-func (db *datastoreDB) ListFilesByFolder(folder string) ([]*File, error) {
+func (db *datastoreDB) ListFilesByFolder(folder string) ([]File, error) {
 	ctx := context.Background()
-	encfile := make([]*File, 0)
+	encfile := make([]File, 0)
 	q := datastore.NewQuery("FileStruct").Filter("Folder =", folder)
 	_, err := db.client.GetAll(ctx, q, &encfile)
 
@@ -186,35 +166,6 @@ func (db *datastoreDB) ListFilesByFolder(folder string) ([]*File, error) {
 		return nil, fmt.Errorf("datastoredb: could not list books: %v", err)
 	}
 
-	return encfile, nil
-}
-
-func (db *datastoreDB) ListFilesByFolderID(folderid string) ([]*File, error) {
-	ctx := context.Background()
-	encfile := make([]*File, 0)
-	q := datastore.NewQuery("FileStruct").Filter("FolderID =", folderid)
-	_, err := db.client.GetAll(ctx, q, &encfile)
-
-	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list books: %v", err)
-	}
-
-	return encfile, nil
-}
-
-func (db *datastoreDB) ListFilesByFolderPath(folderpath string) ([]*File, error) {
-	ctx := context.Background()
-	encfile := make([]*File, 0)
-
-	// get all nested folders as well
-	q := datastore.NewQuery("FileStruct").Filter("Folder =", folderpath)
-	_, err := db.client.GetAll(ctx, q, &encfile)
-
-	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list books: %v", err)
-	}
-
-	fmt.Println(encfile)
 	return encfile, nil
 }
 
@@ -232,6 +183,18 @@ func (db *datastoreDB) DeleteFile(uuid string) error {
 	err = db.client.Delete(ctx, keys[0])
 
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db *datastoreDB) DeleteFolder(key int64) error {
+	ctx := context.Background()
+
+	err := db.client.Delete(ctx, &datastore.Key{ID: key, Kind: "FolderStruct"})
+
+	if err != nil {
+		fmt.Println("error deletting folder: ", err.Error())
 		return err
 	}
 	return nil

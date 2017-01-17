@@ -19,6 +19,7 @@ type File struct {
 }
 
 type FolderTree struct {
+	ID            int64 `datastore:"-"`
 	PublishedDate time.Time
 	ParentKey     int64
 	ParentFolder  string
@@ -26,20 +27,16 @@ type FolderTree struct {
 }
 
 type FileDatabase interface {
-	ListFiles(string) ([]*File, error)
-	ListFolders(string) ([]*FolderTree, int64, error)
+	ListFiles(string) ([]File, error)
+	ListFolders(string) ([]FolderTree, int64, error)
 
-	ListFilesByFolder(string) ([]*File, error)
-	ListFilesByFolderID(string) ([]*File, error)
-	ListFilesByFolderPath(string) ([]*File, error)
-
-	DoesFolderExist(parent, folder string) (bool, int64)
+	ListFilesByFolder(string) ([]File, error)
 
 	AddFolder(f *FolderTree) (int64, error)
 	AddFile(f *File) (id int64, err error)
 	GetFile(id string) (*File, error)
 	DeleteFile(uuid string) error
-
+	DeleteFolder(key int64) error
 	NOOP()
 	Close()
 }

@@ -1,14 +1,22 @@
 package gscrypto
 
 import (
+	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"log"
 	"os"
+	"syscall"
+	"time"
+
+	zxcvbn "github.com/nbutton23/zxcvbn-go"
 
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/storage"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/pbkdf2"
+	"golang.org/x/crypto/ssh/terminal"
 
 	"golang.org/x/net/context"
 )
@@ -66,53 +74,52 @@ func init() {
 	}
 
 	//PasswordConf = PasswordConfig{[]byte("abc")}
-	/*
-		var password []byte
-		if ph, err := PasswordDB.GetCryptoPasswordHash(); err != nil && err.Error() == ErrorNoDatabaseEntryFound {
-			fmt.Println("No password credentials are stored for file encryption/decryption, set them below.")
-			fmt.Print("Password: ")
-			password1, _ := terminal.ReadPassword(int(syscall.Stdin))
-			fmt.Print("\nPassword repeat: ")
-			fmt.Print()
-			password2, _ := terminal.ReadPassword(int(syscall.Stdin))
 
-			if !bytes.Equal(password1, password2) {
-				panic("Passwords don't match")
-			}
+	var password []byte
+	if ph, err := PasswordDB.GetCryptoPasswordHash(); err != nil && err.Error() == ErrorNoDatabaseEntryFound {
+		fmt.Println("No password credentials are stored for file encryption/decryption, set them below.")
+		fmt.Print("Password: ")
+		password1, _ := terminal.ReadPassword(int(syscall.Stdin))
+		fmt.Print("\nPassword repeat: ")
+		fmt.Print()
+		password2, _ := terminal.ReadPassword(int(syscall.Stdin))
 
-			passwordInfo := zxcvbn.PasswordStrength(string(password1), []string{})
-			if passwordInfo.Score < 3 {
-				panic("The password you picked isn't secure enough.")
-			}
-
-			password = password1
-			newPasswordHash, err := generatePasswordHash(password1)
-
-			if err != nil {
-				panic(err)
-			}
-
-			salt := make([]byte, 32)
-			rand.Read(salt)
-
-			passwordHash := &PasswordHash{
-				CreatedDate: time.Now(),
-				Hash:        newPasswordHash,
-				Iterations:  500000,
-				Salt:        salt,
-			}
-			PasswordDB.SetCryptoPasswordHash(passwordHash)
-		} else {
-			fmt.Print("Password: ")
-			password, _ = terminal.ReadPassword(int(syscall.Stdin))
-
-			if err := bcrypt.CompareHashAndPassword(ph.Hash, password); err != nil {
-				panic(err)
-			}
+		if !bytes.Equal(password1, password2) {
+			panic("Passwords don't match")
 		}
 
-		configureCrypto(password)
-	*/
+		passwordInfo := zxcvbn.PasswordStrength(string(password1), []string{})
+		if passwordInfo.Score < 3 {
+			panic("The password you picked isn't secure enough.")
+		}
+
+		password = password1
+		newPasswordHash, err := generatePasswordHash(password1)
+
+		if err != nil {
+			panic(err)
+		}
+
+		salt := make([]byte, 32)
+		rand.Read(salt)
+
+		passwordHash := &PasswordHash{
+			CreatedDate: time.Now(),
+			Hash:        newPasswordHash,
+			Iterations:  500000,
+			Salt:        salt,
+		}
+		PasswordDB.SetCryptoPasswordHash(passwordHash)
+	} else {
+		fmt.Print("Password: ")
+		password, _ = terminal.ReadPassword(int(syscall.Stdin))
+
+		if err := bcrypt.CompareHashAndPassword(ph.Hash, password); err != nil {
+			panic(err)
+		}
+	}
+
+	configureCrypto(password)
 }
 
 func generatePasswordHash(password []byte) ([]byte, error) {

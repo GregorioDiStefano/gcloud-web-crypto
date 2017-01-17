@@ -112,12 +112,18 @@ func main() {
 	r.DELETE("/folder", func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "DELETE")
-		//folderDeletePath := c.Query("path")
-		//err := deleteFolder(folderDeletePath)
+		folderDeletePath := c.Query("path")
+		err := deleteFolder(folderDeletePath)
 
-		//if err != nil {
-		//	fmt.Println(err)
-		//}
+		if err != nil {
+			fmt.Println(err)
+		}
+		_, folderID, err := gc.FileStructDB.ListFolders(folderDeletePath)
+		gc.FileStructDB.DeleteFolder(folderID)
+
+		if err != nil {
+			fmt.Println(err)
+		}
 	})
 
 	r.GET("/file/", func(c *gin.Context) {
@@ -140,8 +146,10 @@ func main() {
 	r.GET("/file/:key", func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
+
 		k := c.Param("key")
 		ef, err := gc.FileStructDB.GetFile(k)
+
 		if err != nil {
 			c.Abort()
 		}
@@ -155,8 +163,9 @@ func main() {
 
 		c.Writer.Header().Set("content-disposition", "attachment; filename=\""+ef.Filename+"\"")
 
-		Decrypt(r, c.Writer)
-
+		err = Decrypt(r, c.Writer)
+		c.Writer.Flush()
+		fmt.Println("error: ", err)
 	})
 
 	r.GET("/list/", func(c *gin.Context) {
@@ -165,7 +174,7 @@ func main() {
 
 		if len(path) == 0 {
 			c.JSON(http.StatusBadRequest, "path is missing")
-		} else if fs, err := listFileSystem(path, c); err != nil {
+		} else if fs, err := listFileSystem(path); err != nil {
 			c.JSON(http.StatusInternalServerError, err)
 		} else {
 			c.IndentedJSON(http.StatusOK, fs)

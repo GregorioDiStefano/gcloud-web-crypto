@@ -88,22 +88,21 @@ func processFileUpload(c *gin.Context) error {
 		return errors.New("No files found in payload")
 	}
 
-	seenFullPath := []string{}
-
+	seenPathsMap := make(map[string]int64)
 	for _, f := range allFiles {
-		fullFilePath := filepath.Join(virtualFolder, filepath.Dir(f.Filename))
-
-		if !stringInSlice(fullFilePath, seenFullPath) {
-			seenFullPath = append(seenFullPath, fullFilePath)
+		folder := normalizeFolder(filepath.Join(virtualFolder, filepath.Dir(f.Filename)))
+		for seenFolder := range seenPathsMap {
+			if seenFolder == folder {
+				continue
+			}
 		}
-
-		createDirectoryTree(normalizeFolder(filepath.Join(virtualFolder, filepath.Dir(f.Filename))))
+		createDirectoryTree(folder, seenPathsMap)
 	}
 
 	uploadTasks := make(chan multipart.FileHeader, 64)
 	var wg sync.WaitGroup
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 15; i++ {
 		wg.Add(1)
 		go func() {
 			for fh := range uploadTasks {
@@ -165,6 +164,7 @@ func getParentFolderFromFolder(path string) string {
 }
 
 func normalizeFolder(path string) string {
+	path = filepath.Clean(path)
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
@@ -181,37 +181,4 @@ func stringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
-}
-
-func createDirectoryTree(path string) {
-	fmt.Println("Creating tree for: ", path)
-	ft, _, err := gc.FileStructDB.ListFolders(path)
-	if err != nil {
-		fmt.Println(err)
-	}
-	if ft != nil {
-		fmt.Printf("no creating directory %s , since it already exists\n", path)
-		return
-	}
-
-	var lastSeenKey int64
-	var lastFolder []string
-	for k, v := range gc.PathToFolderTree(path) {
-		lastFolder = append(lastFolder, v.Folder)
-		folder := normalizeFolder(strings.Join(lastFolder, "/"))
-		fmt.Println("Checking if: ", folder, "exists")
-		seenfolder, key, _ := gc.FileStructDB.ListFolders(folder)
-
-		if seenfolder != nil {
-			lastSeenKey = key
-			fmt.Println("key: ", lastSeenKey)
-		} else {
-			fmt.Println("folder: ", folder, " doesnt exist")
-			v.ParentKey = lastSeenKey
-			key, _ := gc.FileStructDB.AddFolder(v)
-			lastSeenKey = key
-		}
-
-		fmt.Println(k, v)
-	}
 }

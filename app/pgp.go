@@ -20,26 +20,26 @@ func init() {
 	}
 }
 
-func Encrypt(src io.Reader, w io.Writer) error {
+func Encrypt(src io.Reader, w io.Writer) (err error) {
 	password := gc.PasswordConf.PgpPassword
 	cipherText, err := openpgp.SymmetricallyEncrypt(w, password, nil, &packetConfig)
 
 	if err != nil {
-		return nil
+		return
 	}
 	defer cipherText.Close()
 
 	if err != nil {
-		return err
+		return
 	}
 
 	writer := io.MultiWriter(cipherText)
 	_, err = io.Copy(writer, src)
 
 	if err != nil {
-		return err
+		return
 	}
-	return nil
+	return
 }
 
 func Decrypt(r io.Reader, df io.Writer) (err error) {

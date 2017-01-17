@@ -3,8 +3,8 @@ package main
 import (
 	"archive/zip"
 	"context"
-	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,11 +21,9 @@ func downloadFolder(httpContext gin.Context, path string) error {
 	zipfile := strings.Split(path, "/")
 	zipfileStr := zipfile[len(zipfile)-1] + ".zip"
 
-	//files, err := gc.FileStructDB.ListNestedByFolderPath(path)
-	files, err := gc.FileStructDB.ListFiles(path)
-	if err != nil {
-		return errors.New(errorUnableToLoadNestedFolders)
-	}
+	files := listAllNestedFiles(path)
+
+	fmt.Println("zipfile: ", zipfile, "files: ", files)
 
 	httpContext.Writer.Header().Set("Content-Type", "application/zip")
 	httpContext.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipfileStr))
@@ -34,28 +32,37 @@ func downloadFolder(httpContext gin.Context, path string) error {
 
 	for _, v := range files {
 		ctx := context.Background()
-		r, err := gc.StorageBucket.Object(v.ID).NewReader(ctx)
+		r, err := gc.StorageBucket.Object(string(v.ID)).NewReader(ctx)
+
+		if r == nil {
+			fmt.Println(v.ID, " is nil")
+			continue
+		} else {
+			fmt.Println("filesize: ", r.Size())
+		}
 
 		if err != nil {
 			return err
 		}
 
 		header := &zip.FileHeader{
-			Name: "fix",
-			//Name:         filepath.Join(v.Folder, v.Filename),
+			Name:         filepath.Join(v.Folder, v.Filename),
 			Method:       zip.Deflate,
 			ModifiedTime: uint16(time.Now().UnixNano()),
 			ModifiedDate: uint16(time.Now().UnixNano()),
 		}
 
+		fmt.Println("File: ", header.Name, " added to zip archive")
 		fw, err := zw.CreateHeader(header)
 
 		if err != nil {
 			return err
 		}
 
-		Decrypt(r, fw)
-
+		if err := Decrypt(r, fw); err != nil {
+			fmt.Println(err)
+			return err
+		}
 	}
 
 	return nil
