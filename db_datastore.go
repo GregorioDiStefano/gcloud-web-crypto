@@ -8,8 +8,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-// datastoreDB persists books to Cloud Datastore.
-// https://cloud.google.com/datastore/docs/concepts/overview
 type datastoreDB struct {
 	client *datastore.Client
 }
@@ -18,12 +16,8 @@ const (
 	ErrorNoDatabaseEntryFound = "no entry found"
 )
 
-// Ensure datastoreDB conforms to the BookDatabase interface.
 var _ FileDatabase = &datastoreDB{}
 
-// newDatastoreDB creates a new BookDatabase backed by Cloud Datastore.
-// See the datastore and google packages for details on creating a suitable Client:
-// https://godoc.org/cloud.google.com/go/datastore
 func newDatastoreDB(client *datastore.Client) (*datastoreDB, error) {
 	ctx := context.Background()
 	// Verify that we can communicate and authenticate with the datastore service.
@@ -44,11 +38,6 @@ func (db *datastoreDB) Close() {
 	// No op.
 }
 
-func (db *datastoreDB) datastoreKey(id int64) *datastore.Key {
-	return datastore.IDKey("Book", id, nil)
-}
-
-// GetBook retrieves a book by its ID.
 func (db *datastoreDB) GetFile(id string) (*File, error) {
 	ctx := context.Background()
 	encfile := make([]*File, 0)
@@ -58,7 +47,7 @@ func (db *datastoreDB) GetFile(id string) (*File, error) {
 	keys, err := db.client.GetAll(ctx, q, &encfile)
 
 	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list books: %v", err)
+		return nil, fmt.Errorf("datastoredb: could not list files: %v", err)
 	}
 
 	fmt.Println("keys: ", keys, err)
@@ -66,10 +55,6 @@ func (db *datastoreDB) GetFile(id string) (*File, error) {
 		fmt.Println(i, k, encfile)
 	}
 
-	//	if err := db.client.Get(ctx, k, encfile); err != nil {
-	//		return nil, fmt.Errorf("datastoredb: could not get Book: %v", err)
-	//	}
-	fmt.Println(encfile)
 	return encfile[0], nil
 }
 
@@ -79,7 +64,7 @@ func (db *datastoreDB) AddFile(b *File) (id int64, err error) {
 	//	k := datastore.IncompleteKey("FileStruct", nil)
 	k, err = db.client.Put(ctx, k, b)
 	if err != nil {
-		return 0, fmt.Errorf("datastoredb: could not put Book: %v", err)
+		return 0, fmt.Errorf("datastoredb: could not put file: %v", err)
 	}
 	return k.ID, nil
 }
@@ -97,7 +82,7 @@ func (db *datastoreDB) ListFiles(path string) ([]File, error) {
 	_, err := db.client.GetAll(ctx, q, &encfile)
 
 	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list books: %v", err)
+		return nil, fmt.Errorf("datastoredb: could not list files: %v", err)
 	}
 
 	return encfile, nil
@@ -136,7 +121,7 @@ func (db *datastoreDB) ListFolders(path string) ([]FolderTree, int64, error) {
 	encfile = make([]FolderTree, 0)
 
 	if keys, err := db.client.GetAll(ctx, nq, &encfile); err != nil {
-		return nil, 0, fmt.Errorf("datastoredb: could not list books: %v", err)
+		return nil, 0, fmt.Errorf("datastoredb: could not list files: %v", err)
 	} else {
 		for index, key := range keys {
 			encfile[index].ID = key.ID
@@ -154,19 +139,6 @@ func (db *datastoreDB) AddFolder(ft *FolderTree) (int64, error) {
 		return 0, err
 	}
 	return key.ID, err
-}
-
-func (db *datastoreDB) ListFilesByFolder(folder string) ([]File, error) {
-	ctx := context.Background()
-	encfile := make([]File, 0)
-	q := datastore.NewQuery("FileStruct").Filter("Folder =", folder)
-	_, err := db.client.GetAll(ctx, q, &encfile)
-
-	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list books: %v", err)
-	}
-
-	return encfile, nil
 }
 
 func (db *datastoreDB) DeleteFile(uuid string) error {
@@ -250,10 +222,4 @@ func (db *datastoreDB) GetUserCreds(username string) (*UserCredentials, error) {
 	}
 
 	return uc[0], nil
-}
-
-// hack to get around connection closing issue
-func (db *datastoreDB) NOOP() {
-	ctx := context.Background()
-	db.client.Delete(ctx, db.datastoreKey(0))
 }

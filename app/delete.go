@@ -39,9 +39,9 @@ func deleteFolder(folderPath string) error {
 	for _, fsObject := range nestedObjects {
 		if fsObject.Type == "folder" {
 			deleteFolder(fsObject.FullPath)
-			fmt.Println("Deleting: ", gc.FileStructDB.DeleteFolder(fsObject.ObjectData.(*gc.FolderTree).ID))
+			gc.FileStructDB.DeleteFolder(fsObject.ObjectData.(gc.FolderTree).ID)
 		} else {
-			fileID := fsObject.ObjectData.(*gc.File).ID
+			fileID := fsObject.ObjectData.(gc.File).ID
 			deleteFileIDs = append(deleteFileIDs, fileID)
 		}
 	}

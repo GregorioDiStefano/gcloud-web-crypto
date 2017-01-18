@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -29,14 +28,6 @@ func main() {
 	if AUTH_ENABLED {
 		private.Use(jwt.Auth(gc.SecretKey))
 	}
-
-	go func() {
-		for {
-			fmt.Println("running noop")
-			time.Sleep(30 * time.Second)
-			gc.FileStructDB.NOOP()
-		}
-	}()
 
 	store := sessions.NewCookieStore([]byte(gc.SecretKey))
 	r.Use(sessions.Sessions("session", store))
@@ -144,28 +135,10 @@ func main() {
 	})
 
 	r.GET("/file/:key", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
-
-		k := c.Param("key")
-		ef, err := gc.FileStructDB.GetFile(k)
-
-		if err != nil {
-			c.Abort()
+		key := c.Param("key")
+		if err := downloadFile(c, key); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
 		}
-
-		ctx := context.Background()
-		r, err := gc.StorageBucket.Object(ef.ID).NewReader(ctx)
-
-		if err != nil {
-			panic(err)
-		}
-
-		c.Writer.Header().Set("content-disposition", "attachment; filename=\""+ef.Filename+"\"")
-
-		err = Decrypt(r, c.Writer)
-		c.Writer.Flush()
-		fmt.Println("error: ", err)
 	})
 
 	r.GET("/list/", func(c *gin.Context) {

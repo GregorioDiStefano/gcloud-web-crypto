@@ -27,18 +27,18 @@ func listAllNestedFiles(path string) []gc.File {
 	folders, _, _ := gc.FileStructDB.ListFolders(path)
 	files, _ := gc.FileStructDB.ListFiles(path)
 
-	for _, f := range files {
-		nestedFiles = append(nestedFiles, f)
+	for _, file := range files {
+		nestedFiles = append(nestedFiles, file)
 	}
 
 	var wg sync.WaitGroup
 
-	for _, f := range folders {
+	for _, folder := range folders {
 		wg.Add(1)
 		go func(f gc.FolderTree) {
 			defer wg.Done()
 			nestedFiles = append(nestedFiles, listAllNestedFiles(filepath.Join(path, f.Folder))...)
-		}(f)
+		}(folder)
 	}
 
 	wg.Wait()

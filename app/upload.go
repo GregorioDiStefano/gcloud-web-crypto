@@ -28,17 +28,7 @@ func doUpload(title string, description string, virtualFolder string, tags []str
 	folder := normalizeFolder(filepath.Clean(filepath.Join("/", virtualFolder, filepath.Dir(fh.Filename))))
 	_, filename := filepath.Split(fh.Filename)
 
-	/*
-		if remoteFolders, err := gc.FileStructDB.ListFilesByFolder(folder); err != nil {
-			return err
-		} else if len(remoteFolders) > 0 {
-			for _, v := range remoteFolders {
-				if v.Filename == filename && v.Folder == folder {
-					return errors.New("file/folder already exists")
-				}
-			}
-		}
-	*/
+	//TODO: check for file duplicates
 
 	filetype := fh.Header.Get("Content-Type")
 
@@ -55,10 +45,6 @@ func doUpload(title string, description string, virtualFolder string, tags []str
 			Title:         title,
 			Description:   description,
 			Tags:          tags}
-
-		//workaround for bug.
-		gc.FileStructDB.NOOP()
-		gc.FileStructDB.NOOP()
 
 		_, err := gc.FileStructDB.AddFile(newFile)
 

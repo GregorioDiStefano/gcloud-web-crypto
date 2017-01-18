@@ -29,15 +29,12 @@ type FolderTree struct {
 type FileDatabase interface {
 	ListFiles(string) ([]File, error)
 	ListFolders(string) ([]FolderTree, int64, error)
-
-	ListFilesByFolder(string) ([]File, error)
-
 	AddFolder(f *FolderTree) (int64, error)
 	AddFile(f *File) (id int64, err error)
 	GetFile(id string) (*File, error)
 	DeleteFile(uuid string) error
 	DeleteFolder(key int64) error
-	NOOP()
+
 	Close()
 }
 
