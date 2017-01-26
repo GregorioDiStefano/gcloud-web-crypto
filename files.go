@@ -6,35 +6,35 @@ import (
 )
 
 type File struct {
-	ID            string
-	Filename      string
-	Folder        string
-	FileType      string
-	FileSize      int64
-	PublishedDate time.Time
-	Description   string
-	Tags          []string
-	Title         string
-	MD5           string
+	ID          int64 `datastore:"-"`
+	Filename    []byte
+	Folder      string
+	FileType    string
+	FileSize    int64
+	UploadDate  time.Time
+	Description string
+	Tags        []string
+	MD5         string
 }
 
 type FolderTree struct {
-	ID            int64 `datastore:"-"`
-	PublishedDate time.Time
-	ParentKey     int64
-	ParentFolder  string
-	Folder        string
+	ID           int64 `datastore:"-"`
+	UploadDate   time.Time
+	ParentKey    int64
+	ParentFolder string
+	Folder       string
 }
 
 type FileDatabase interface {
 	ListFiles(string) ([]File, error)
+	ListTags() ([]string, error)
+	ListFilesWithTags([]string) ([]File, error)
 	ListFolders(string) ([]FolderTree, int64, error)
 	AddFolder(f *FolderTree) (int64, error)
 	AddFile(f *File) (id int64, err error)
-	GetFile(id string) (*File, error)
-	DeleteFile(uuid string) error
-	DeleteFolder(key int64) error
-
+	GetFile(id int64) (*File, error)
+	DeleteFile(id int64) error
+	DeleteFolder(id int64) error
 	Close()
 }
 

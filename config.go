@@ -26,7 +26,7 @@ var (
 	PasswordDB   PasswordDatabase
 	UserCreds    UserCredentialsDatabase
 
-	PasswordConf PasswordConfig
+	Password []byte
 
 	StorageBucket     *storage.BucketHandle
 	StorageBucketName string
@@ -119,7 +119,11 @@ func init() {
 		}
 	}
 
-	configureCrypto(password)
+	if password, err := configureCrypto(password); err != nil {
+		panic("failed to setup password: " + err.Error())
+	} else {
+		Password = password
+	}
 }
 
 func generatePasswordHash(password []byte) ([]byte, error) {
@@ -130,14 +134,16 @@ func generatePasswordHash(password []byte) ([]byte, error) {
 	}
 }
 
-func configureCrypto(password []byte) error {
+func configureCrypto(password []byte) ([]byte, error) {
 	passinfo, err := PasswordDB.GetCryptoPasswordHash()
+
 	if err != nil {
-		return err
+		return nil, err
 	}
-	key := pbkdf2.Key(password, passinfo.Salt, passinfo.Iterations, 256, sha256.New)
-	PasswordConf = PasswordConfig{PgpPassword: key}
-	return nil
+
+	key := pbkdf2.Key(password, passinfo.Salt, passinfo.Iterations, 32, sha256.New)
+
+	return key, nil
 }
 
 func configureDatastoreDB(projectID string) (*datastoreDB, error) {

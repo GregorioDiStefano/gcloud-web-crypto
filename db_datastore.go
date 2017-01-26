@@ -23,10 +23,10 @@ func newDatastoreDB(client *datastore.Client) (*datastoreDB, error) {
 	// Verify that we can communicate and authenticate with the datastore service.
 	t, err := client.NewTransaction(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not connect: %v", err)
+		return nil, fmt.Errorf("could not connect: %v", err)
 	}
 	if err := t.Rollback(); err != nil {
-		return nil, fmt.Errorf("datastoredb: could not connect: %v", err)
+		return nil, fmt.Errorf("could not connect: %v", err)
 	}
 	return &datastoreDB{
 		client: client,
@@ -38,24 +38,21 @@ func (db *datastoreDB) Close() {
 	// No op.
 }
 
-func (db *datastoreDB) GetFile(id string) (*File, error) {
+func (db *datastoreDB) GetFile(id int64) (*File, error) {
 	ctx := context.Background()
-	encfile := make([]*File, 0)
+	var encfile File
+	fmt.Println("ID = ", id)
 
-	q := datastore.NewQuery("FileStruct").Filter("ID =", id)
+	key := datastore.IDKey("FileStruct", id, nil)
 
-	keys, err := db.client.GetAll(ctx, q, &encfile)
+	err := db.client.Get(ctx, key, &encfile)
 
 	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list files: %v", err)
+		return nil, fmt.Errorf("could not list files: %v", err)
 	}
 
-	fmt.Println("keys: ", keys, err)
-	for i, k := range keys {
-		fmt.Println(i, k, encfile)
-	}
-
-	return encfile[0], nil
+	fmt.Println("file: ", encfile)
+	return &encfile, nil
 }
 
 func (db *datastoreDB) AddFile(b *File) (id int64, err error) {
@@ -64,7 +61,7 @@ func (db *datastoreDB) AddFile(b *File) (id int64, err error) {
 	//	k := datastore.IncompleteKey("FileStruct", nil)
 	k, err = db.client.Put(ctx, k, b)
 	if err != nil {
-		return 0, fmt.Errorf("datastoredb: could not put file: %v", err)
+		return 0, fmt.Errorf("could not put file: %v", err)
 	}
 	return k.ID, nil
 }
@@ -79,10 +76,55 @@ func (db *datastoreDB) ListFiles(path string) ([]File, error) {
 		q = q.Filter("Folder =", path)
 	}
 
+	if keys, err := db.client.GetAll(ctx, q, &encfile); err != nil {
+		return nil, fmt.Errorf("could not list files: %v", err)
+	} else {
+		for index, key := range keys {
+			encfile[index].ID = key.ID
+		}
+	}
+
+	return encfile, nil
+}
+
+func (db *datastoreDB) ListTags() ([]string, error) {
+	ctx := context.Background()
+
+	tags := []string{}
+	encfile := make([]File, 0)
+	q := datastore.NewQuery("FileStruct").Project("Tags").Distinct()
+
 	_, err := db.client.GetAll(ctx, q, &encfile)
 
 	if err != nil {
-		return nil, fmt.Errorf("datastoredb: could not list files: %v", err)
+		fmt.Println(err)
+		return nil, err
+	}
+
+	for _, f := range encfile {
+		for _, tag := range f.Tags {
+			tags = append(tags, tag)
+		}
+	}
+
+	return tags, nil
+}
+
+func (db *datastoreDB) ListFilesWithTags(tags []string) ([]File, error) {
+	ctx := context.Background()
+
+	encfile := make([]File, 0)
+	q := datastore.NewQuery("FileStruct")
+
+	for _, tag := range tags {
+		fmt.Println("searching for files with tag: ", tag)
+		q = q.Filter("Tags =", tag)
+	}
+
+	_, err := db.client.GetAll(ctx, q, &encfile)
+
+	if err != nil {
+		return nil, fmt.Errorf("could not list files: %v", err)
 	}
 
 	return encfile, nil
@@ -121,7 +163,7 @@ func (db *datastoreDB) ListFolders(path string) ([]FolderTree, int64, error) {
 	encfile = make([]FolderTree, 0)
 
 	if keys, err := db.client.GetAll(ctx, nq, &encfile); err != nil {
-		return nil, 0, fmt.Errorf("datastoredb: could not list files: %v", err)
+		return nil, 0, fmt.Errorf("could not list files: %v", err)
 	} else {
 		for index, key := range keys {
 			encfile[index].ID = key.ID
@@ -141,22 +183,13 @@ func (db *datastoreDB) AddFolder(ft *FolderTree) (int64, error) {
 	return key.ID, err
 }
 
-func (db *datastoreDB) DeleteFile(uuid string) error {
+func (db *datastoreDB) DeleteFile(id int64) error {
 	ctx := context.Background()
-	q := datastore.NewQuery("FileStruct").Filter("ID =", uuid)
-	encfile := make([]*File, 1)
-
-	keys, err := db.client.GetAll(ctx, q, &encfile)
-
+	err := db.client.Delete(ctx, &datastore.Key{ID: id, Kind: "FileStruct"})
 	if err != nil {
 		return err
 	}
 
-	err = db.client.Delete(ctx, keys[0])
-
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

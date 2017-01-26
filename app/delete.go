@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -9,39 +10,49 @@ import (
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 )
 
-func deleteFile(uuid string) error {
-	fmt.Println("Deleting: ", uuid)
-	err := gc.FileStructDB.DeleteFile(uuid)
+const (
+	errorDeleteRootNotPermitted = "unable to delete root"
+	errorDeletePathEmpty        = "the requested delete path contains no files"
+)
+
+func (cIO *cloudIO) deleteFile(id int64) error {
+	err := gc.FileStructDB.DeleteFile(id)
 
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	if err := gc.StorageBucket.Object(uuid).Delete(ctx); err != nil {
-		return fmt.Errorf("unable to delete file: %s", uuid)
+	if err := gc.StorageBucket.Object(string(id)).Delete(ctx); err != nil {
+		return fmt.Errorf("unable to delete file: %d", id)
 	} else {
 		return nil
 	}
 }
 
-func deleteFolder(folderPath string) error {
-	fmt.Println("Delete folder: ", folderPath)
-	var deleteFileIDs []string
+func (cIO *cloudIO) deleteFolder(folderPath string) error {
+	var deleteFileIDs []int64
 	folderPath = filepath.Clean(folderPath)
-	nestedObjects, err := listFileSystem(folderPath)
 
-	if err != nil {
-		fmt.Println(err)
+	if folderPath == "/" {
+		return errors.New(errorDeleteRootNotPermitted)
+	}
+	nestedObjects, err := cIO.listFileSystem(folderPath)
+
+	if len(nestedObjects) == 0 {
+		return errors.New(errorDeletePathEmpty)
+	} else if err != nil {
 		return err
 	}
 
+	fmt.Println("Delete folder: ", folderPath)
+
 	for _, fsObject := range nestedObjects {
 		if fsObject.Type == "folder" {
-			deleteFolder(fsObject.FullPath)
-			gc.FileStructDB.DeleteFolder(fsObject.ObjectData.(gc.FolderTree).ID)
+			cIO.deleteFolder(fsObject.FullPath)
+			gc.FileStructDB.DeleteFolder(fsObject.ID)
 		} else {
-			fileID := fsObject.ObjectData.(gc.File).ID
+			fileID := fsObject.ID
 			deleteFileIDs = append(deleteFileIDs, fileID)
 		}
 	}
@@ -52,13 +63,13 @@ func deleteFolder(folderPath string) error {
 		return err
 	}
 
-	deleteTasks := make(chan string, 64)
+	deleteTasks := make(chan int64, 64)
 	for i := 0; i < 25; i++ {
 		wg.Add(1)
 		go func() {
-			for uuid := range deleteTasks {
+			for id := range deleteTasks {
 				// ignore errors
-				deleteFile(uuid)
+				cIO.deleteFile(id)
 			}
 		}()
 		wg.Done()

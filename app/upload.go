@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
+	"crypto/md5"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"path/filepath"
 	"strings"
@@ -15,49 +16,64 @@ import (
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gin-gonic/gin"
-	uuid "github.com/satori/go.uuid"
 )
 
-func doUpload(title string, description string, virtualFolder string, tags []string, fh *multipart.FileHeader) error {
+func (cio *cloudIO) doUpload(title string, description string, virtualFolder string, tags []string, fh *multipart.FileHeader) error {
 	f, err := fh.Open()
 
 	if err != nil {
 		return err
 	}
 
-	folder := normalizeFolder(filepath.Clean(filepath.Join("/", virtualFolder, filepath.Dir(fh.Filename))))
+	folder := normalizeFolder(filepath.Join("/", virtualFolder, filepath.Dir(fh.Filename)))
+
+	fmt.Println("folder: ", folder)
 	_, filename := filepath.Split(fh.Filename)
-
-	//TODO: check for file duplicates
-
 	filetype := fh.Header.Get("Content-Type")
 
-	fmt.Println("Uploading file:", filename)
-	if key, md5, filesize, err := uploadFileFromForm(fh, f); err == nil {
-		newFile := &gc.File{
-			ID:            key,
-			PublishedDate: time.Now(),
-			MD5:           md5,
-			Folder:        folder,
-			Filename:      filename,
-			FileSize:      filesize,
-			FileType:      filetype,
-			Title:         title,
-			Description:   description,
-			Tags:          tags}
+	md5Hash := md5.New()
+	filesize, err := io.Copy(md5Hash, f)
 
-		_, err := gc.FileStructDB.AddFile(newFile)
+	if err != nil {
+		return err
+	}
+
+	f.Seek(0, 0)
+
+	md5HashHex := md5Hash.Sum(nil)
+	//TODO: check for file duplicates
+
+	fmt.Println("Uploading file:", filename)
+
+	if encryptedFile, err := cio.cryptoKey.EncryptText([]byte(filename)); err != nil {
+		fmt.Println(err)
+		return err
+	} else {
+		newFile := &gc.File{
+			UploadDate:  time.Now(),
+			MD5:         fmt.Sprintf("%x", md5HashHex),
+			Folder:      folder,
+			Filename:    encryptedFile,
+			FileSize:    filesize,
+			FileType:    filetype,
+			Description: description,
+			Tags:        tags}
+
+		newFileID, err := gc.FileStructDB.AddFile(newFile)
 
 		if err != nil {
 			return errors.New("error adding file to database: " + err.Error())
 		} else {
-			spew.Dump(newFile)
+			if err := cio.uploadFileFromForm(fh, f, newFileID); err == nil {
+				spew.Dump(newFile)
+			}
 		}
 	}
+
 	return nil
 }
 
-func processFileUpload(c *gin.Context) error {
+func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 	var tags []string
 
 	title := c.PostForm("title")
@@ -88,12 +104,12 @@ func processFileUpload(c *gin.Context) error {
 	uploadTasks := make(chan multipart.FileHeader, 64)
 	var wg sync.WaitGroup
 
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
 			for fh := range uploadTasks {
 				// ignore errors
-				doUpload(title, description, virtualFolder, tags, &fh)
+				cio.doUpload(title, description, virtualFolder, tags, &fh)
 			}
 			wg.Done()
 		}()
@@ -109,39 +125,29 @@ func processFileUpload(c *gin.Context) error {
 	return nil
 }
 
-func uploadFileFromForm(fh *multipart.FileHeader, f multipart.File) (key, md5 string, size int64, err error) {
-
-	if gc.StorageBucket == nil {
-		return "", "", 0, errors.New("storage bucket is missing - check config.go")
-	}
-
-	key = uuid.NewV4().String()
-
+func (cio *cloudIO) uploadFileFromForm(fh *multipart.FileHeader, f multipart.File, key int64) (err error) {
 	ctx := context.Background()
-	w := gc.StorageBucket.Object(key).NewWriter(ctx)
+	w := gc.StorageBucket.Object(string(key)).NewWriter(ctx)
 
 	w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
 	w.ContentType = fh.Header.Get("Content-Type")
 	w.CacheControl = "public, max-age=86400"
 
-	if err = Encrypt(f, w); err != nil {
-		return "", "", 0, err
+	if err = cio.cryptoKey.EncryptFile(f, w); err != nil {
+		return
 	}
 
 	if err := w.Close(); err != nil {
-		return "", "", 0, err
+		return err
 	}
 
-	if r, err := gc.StorageBucket.Object(key).Attrs(ctx); err != nil {
-		return "", "", 0, fmt.Errorf("unable to grab file attributes after uploading")
-	} else {
-		return key, hex.EncodeToString(r.MD5), r.Size, nil
-	}
+	return nil
 }
 
 func getParentFolderFromFolder(path string) string {
 	splitDirs := strings.Split(path, "/")
 	parentFolder := strings.Join(splitDirs[0:len(splitDirs)-2], "/")
+
 	if len(parentFolder) == 0 {
 		return "/"
 	} else {
@@ -151,9 +157,15 @@ func getParentFolderFromFolder(path string) string {
 
 func normalizeFolder(path string) string {
 	path = filepath.Clean(path)
+
+	if path == "." {
+		return "/"
+	}
+
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+
 	if !strings.HasSuffix(path, "/") {
 		path = path + "/"
 	}

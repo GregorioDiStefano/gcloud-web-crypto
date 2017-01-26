@@ -36,7 +36,7 @@ func createDirectoryTree(path string, cache map[string]int64) int64 {
 			lastSeenKey = foundExistingKey
 		} else {
 			pathSegment.ParentKey = lastSeenKey
-			pathSegment.PublishedDate = time.Now()
+			pathSegment.UploadDate = time.Now()
 			newFolderKey, _ := gc.FileStructDB.AddFolder(pathSegment)
 			lastSeenKey = newFolderKey
 		}

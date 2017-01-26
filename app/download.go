@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
+
+	"github.com/GregorioDiStefano/gcloud-web-crypto/app/crypto"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,26 +19,35 @@ const (
 	errorUnableToLoadNestedFolders = "unable to read from nested folder"
 )
 
-func downloadFile(httpContext *gin.Context, key string) error {
+type cloudIO struct {
+	cryptoKey     crypto.CryptoKey
+	storageBucket *storage.BucketHandle
+}
+
+func (cIO *cloudIO) downloadFile(httpContext *gin.Context, id int64) error {
 	httpContext.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	httpContext.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
 
-	ef, err := gc.FileStructDB.GetFile(key)
+	ef, err := gc.FileStructDB.GetFile(id)
 
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	r, err := gc.StorageBucket.Object(ef.ID).NewReader(ctx)
+	r, err := cIO.storageBucket.Object(string(id)).NewReader(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	httpContext.Writer.Header().Set("content-disposition", "attachment; filename=\""+ef.Filename+"\"")
+	if plainTextFilename, err := cIO.cryptoKey.DecryptText(ef.Filename); err != nil {
+		return err
+	} else {
+		httpContext.Writer.Header().Set("content-disposition", "attachment; filename=\""+string(plainTextFilename)+"\"")
+	}
 
-	if err := Decrypt(r, httpContext.Writer); err != nil {
+	if err := cIO.cryptoKey.DecryptFile(r, httpContext.Writer); err != nil {
 		return err
 	}
 
@@ -43,7 +55,7 @@ func downloadFile(httpContext *gin.Context, key string) error {
 	return nil
 }
 
-func downloadFolder(httpContext gin.Context, path string) error {
+func (cIO *cloudIO) downloadFolder(httpContext gin.Context, path string) error {
 	zipfile := strings.Split(path, "/")
 	zipfileStr := zipfile[len(zipfile)-1] + ".zip"
 
@@ -56,7 +68,7 @@ func downloadFolder(httpContext gin.Context, path string) error {
 
 	for _, file := range files {
 		ctx := context.Background()
-		r, err := gc.StorageBucket.Object(string(file.ID)).NewReader(ctx)
+		r, err := cIO.storageBucket.Object(string(file.ID)).NewReader(ctx)
 
 		if r == nil {
 			fmt.Println(file.ID, " is nil")
@@ -69,8 +81,14 @@ func downloadFolder(httpContext gin.Context, path string) error {
 			return err
 		}
 
+		plainTextFilename, err := cIO.cryptoKey.DecryptText(file.Filename)
+
+		if err != nil {
+			return err
+		}
+
 		header := &zip.FileHeader{
-			Name:         filepath.Join(file.Folder, file.Filename),
+			Name:         filepath.Join(file.Folder, string(plainTextFilename)),
 			Method:       zip.Deflate,
 			ModifiedTime: uint16(time.Now().UnixNano()),
 			ModifiedDate: uint16(time.Now().UnixNano()),
@@ -83,7 +101,7 @@ func downloadFolder(httpContext gin.Context, path string) error {
 			return err
 		}
 
-		if err := Decrypt(r, fw); err != nil {
+		if err := cIO.cryptoKey.DecryptFile(r, fw); err != nil {
 			fmt.Println(err)
 			return err
 		}

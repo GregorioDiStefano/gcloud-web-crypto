@@ -1,4 +1,4 @@
-package main
+package crypto
 
 import (
 	"errors"
@@ -6,8 +6,6 @@ import (
 
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
-
-	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 )
 
 var packetConfig packet.Config
@@ -20,8 +18,8 @@ func init() {
 	}
 }
 
-func Encrypt(src io.Reader, w io.Writer) (err error) {
-	password := gc.PasswordConf.PgpPassword
+func (c *CryptoKey) EncryptFile(src io.Reader, w io.Writer) (err error) {
+	password := c.Key
 	cipherText, err := openpgp.SymmetricallyEncrypt(w, password, nil, &packetConfig)
 
 	if err != nil {
@@ -42,8 +40,8 @@ func Encrypt(src io.Reader, w io.Writer) (err error) {
 	return
 }
 
-func Decrypt(r io.Reader, df io.Writer) (err error) {
-	password := gc.PasswordConf.PgpPassword
+func (c *CryptoKey) DecryptFile(r io.Reader, df io.Writer) (err error) {
+	password := c.Key
 
 	failed := false
 	prompt := func(keys []openpgp.Key, symmetric bool) ([]byte, error) {
