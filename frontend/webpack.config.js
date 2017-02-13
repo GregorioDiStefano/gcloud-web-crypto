@@ -23,6 +23,13 @@ module.exports = {
   },
   devServer: {
     historyApiFallback: true,
-    contentBase: './'
+    contentBase: './',
+    proxy: [
+      {
+        context: ['/file/**', '/folder*', '/list/**', '/tags*', '/account/**'],
+        target: 'http://localhost:3000',
+        secure: false
+      }
+    ]
   }
 };

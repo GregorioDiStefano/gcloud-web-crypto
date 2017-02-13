@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -127,7 +128,8 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 
 func (cio *cloudIO) uploadFileFromForm(fh *multipart.FileHeader, f multipart.File, key int64) (err error) {
 	ctx := context.Background()
-	w := gc.StorageBucket.Object(string(key)).NewWriter(ctx)
+	keyAsString := strconv.FormatInt(key, 10)
+	w := gc.StorageBucket.Object(keyAsString).NewWriter(ctx)
 
 	w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
 	w.ContentType = fh.Header.Get("Content-Type")
@@ -170,13 +172,4 @@ func normalizeFolder(path string) string {
 		path = path + "/"
 	}
 	return path
-}
-
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
 }

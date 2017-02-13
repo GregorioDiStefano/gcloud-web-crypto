@@ -3,23 +3,31 @@ import ReactDOM from 'react-dom';
 import Folder from './components/folders'
 import Upload from './components/upload'
 import request from 'superagent'
-import { Router, Route, Link, browserHistory } from 'react-router'
+import Login from './components/login'
+import { Router, Route, Redirect, Link, browserHistory } from 'react-router'
 
 class App extends Component {
   constructor(props) {
     super(props)
-      this.state = { fs: {}, file: {}}
+  }
+
+    userIsAuthenticated = (nextState, replace) => {
+        if (localStorage.getItem("jwt") == null) {
+          replace(`/login`)
+        }
     }
 
     render() {
-      return <h1>Test</h1>
+      return (
+      <Router history={browserHistory}>
+            <Route path="/" component={Folder} onEnter={this.userIsAuthenticated}/>
+            <Router path="/login" component={Login} />
+            <Route path="upload" component={Upload} onEnter={this.userIsAuthenticated}/>
+      </Router>
+      );
     }
 }
 
 ReactDOM.render((
-        <Router history={browserHistory}>
-            <Route path="/" component={App}/>
-              <Route path="upload" component={Upload}/>
-              <Route path="dir" component={Folder}/>
-        </Router>
+        <App />
       ), document.querySelector('.container'));

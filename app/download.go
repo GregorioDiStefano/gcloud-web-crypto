@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,8 @@ func (cIO *cloudIO) downloadFile(httpContext *gin.Context, id int64) error {
 	}
 
 	ctx := context.Background()
-	r, err := cIO.storageBucket.Object(string(id)).NewReader(ctx)
+	idAsString := strconv.FormatInt(id, 10)
+	r, err := cIO.storageBucket.Object(idAsString).NewReader(ctx)
 
 	if err != nil {
 		return err
@@ -68,7 +70,8 @@ func (cIO *cloudIO) downloadFolder(httpContext gin.Context, path string) error {
 
 	for _, file := range files {
 		ctx := context.Background()
-		r, err := cIO.storageBucket.Object(string(file.ID)).NewReader(ctx)
+		idAsString := strconv.FormatInt(file.ID, 10)
+		r, err := cIO.storageBucket.Object(idAsString).NewReader(ctx)
 
 		if r == nil {
 			fmt.Println(file.ID, " is nil")

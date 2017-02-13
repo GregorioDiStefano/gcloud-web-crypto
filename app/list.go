@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
 	"sync"
 	"time"
@@ -97,8 +96,6 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 			return nil, err
 		}
 
-		fmt.Println(file.ID)
-
 		newFSEntry := FileSystemStructure{
 			ID:          file.ID,
 			Type:        typeFilename,
@@ -110,6 +107,7 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 			FileSize:    file.FileSize,
 			Description: file.Description,
 			Tags:        file.Tags,
+			UploadDate:  file.UploadDate,
 			MD5:         file.MD5,
 		}
 		fs = append(fs, newFSEntry)
@@ -123,10 +121,11 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 
 	for _, folder := range folders {
 		newFSEntry := FileSystemStructure{
-			ID:       folder.ID,
-			Type:     typeFolder,
-			Path:     normalizeFolder(folder.Folder),
-			FullPath: normalizeFolder(filepath.Join(path, folder.Folder))}
+			ID:         folder.ID,
+			Type:       typeFolder,
+			Path:       normalizeFolder(folder.Folder),
+			UploadDate: folder.UploadDate,
+			FullPath:   normalizeFolder(filepath.Join(path, folder.Folder))}
 		fs = append(fs, newFSEntry)
 	}
 

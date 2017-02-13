@@ -26,7 +26,8 @@ var (
 	PasswordDB   PasswordDatabase
 	UserCreds    UserCredentialsDatabase
 
-	Password []byte
+	Password          []byte
+	PlainTextPassword []byte
 
 	StorageBucket     *storage.BucketHandle
 	StorageBucketName string
@@ -75,7 +76,7 @@ func init() {
 
 	//PasswordConf = PasswordConfig{[]byte("abc")}
 
-	var password []byte
+	var plainTextPassword []byte
 	if ph, err := PasswordDB.GetCryptoPasswordHash(); err != nil && err.Error() == ErrorNoDatabaseEntryFound {
 		fmt.Println("No password credentials are stored for file encryption/decryption, set them below.")
 		fmt.Print("Password: ")
@@ -93,7 +94,7 @@ func init() {
 			panic("The password you picked isn't secure enough.")
 		}
 
-		password = password1
+		plainTextPassword = password1
 		newPasswordHash, err := generatePasswordHash(password1)
 
 		if err != nil {
@@ -112,17 +113,18 @@ func init() {
 		PasswordDB.SetCryptoPasswordHash(passwordHash)
 	} else {
 		fmt.Print("Password: ")
-		password, _ = terminal.ReadPassword(int(syscall.Stdin))
+		plainTextPassword, _ = terminal.ReadPassword(int(syscall.Stdin))
 
-		if err := bcrypt.CompareHashAndPassword(ph.Hash, password); err != nil {
+		if err := bcrypt.CompareHashAndPassword(ph.Hash, plainTextPassword); err != nil {
 			panic(err)
 		}
 	}
 
-	if password, err := configureCrypto(password); err != nil {
+	if password, err := configureCrypto(plainTextPassword); err != nil {
 		panic("failed to setup password: " + err.Error())
 	} else {
 		Password = password
+		PlainTextPassword = plainTextPassword
 	}
 }
 

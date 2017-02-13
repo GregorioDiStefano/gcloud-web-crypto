@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 	jwt_lib "github.com/dgrijalva/jwt-go"
 
 	"github.com/gin-gonic/contrib/jwt"
-	"github.com/gin-gonic/contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,59 +24,36 @@ const (
 
 func main() {
 	r := gin.Default()
-	r.LoadHTMLGlob("templates/*")
 
 	private := r.Group("/auth")
-
 	cryptoKey := crypto.CryptoKey{Key: gc.Password}
-	fmt.Println("cryptoKey: ", cryptoKey)
 	cloudio := cloudIO{cryptoKey: cryptoKey, storageBucket: gc.StorageBucket}
 
 	if AUTH_ENABLED {
 		private.Use(jwt.Auth(gc.SecretKey))
 	}
 
-	store := sessions.NewCookieStore([]byte(gc.SecretKey))
-	r.Use(sessions.Sessions("session", store))
-
-	private.POST("/create", func(c *gin.Context) {
-	})
-
-	r.GET("/", func(c *gin.Context) {
-		if _, err := gc.UserCreds.GetUserCreds("admin"); err != nil && err.Error() == gc.ErrorNoDatabaseEntryFound {
-			token := jwt_lib.New(jwt_lib.GetSigningMethod("HS256"))
-			token.Claims = jwt_lib.MapClaims{
-				"status": "create_admin",
-				"exp":    time.Now().Add(time.Hour * 1).Unix(),
-			}
-			c.HTML(http.StatusOK, "admin_account_creation.html", gin.H{})
+	r.POST("/account/login", func(c *gin.Context) {
+		if passwordFromForm, ok := c.GetPostForm("password"); !ok || !bytes.Equal([]byte(passwordFromForm), gc.PlainTextPassword) {
+			c.Status(http.StatusForbidden)
+			return
 		}
-	})
-
-	r.GET("/login", func(c *gin.Context) {
 
 		token := jwt_lib.New(jwt_lib.GetSigningMethod("HS256"))
 
 		token.Claims = jwt_lib.MapClaims{
 			"id":  "admin",
-			"exp": time.Now().Add(time.Hour * 24 * 3).Unix(),
+			"exp": time.Now().Add(time.Hour * 24 * 30).Unix(),
 		}
 
-		tokenString, err := token.SignedString([]byte("a"))
+		tokenString, err := token.SignedString([]byte(gc.SecretKey))
 		if err != nil {
 			c.JSON(500, gin.H{"message": "Could not generate token"})
 		}
 		c.JSON(200, gin.H{"token": tokenString})
 	})
 
-	r.OPTIONS("/file/", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET")
-	})
-
-	r.POST("/file/", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET")
+	private.POST("/file/", func(c *gin.Context) {
 		err := cloudio.processFileUpload(c)
 
 		if err != nil {
@@ -86,14 +63,7 @@ func main() {
 		c.JSON(http.StatusOK, map[string]string{"upload": "success"})
 	})
 
-	r.OPTIONS("/file/:uuid", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "DELETE")
-	})
-
-	r.DELETE("/file/:uuid", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "DELETE")
+	private.DELETE("/file/:uuid", func(c *gin.Context) {
 
 		id, err := strconv.ParseInt(c.Param("uuid"), 10, 64)
 
@@ -109,15 +79,7 @@ func main() {
 		}
 	})
 
-	r.OPTIONS("/folder", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "DELETE")
-	})
-
-	r.DELETE("/folder", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "DELETE")
-
+	private.DELETE("/folder", func(c *gin.Context) {
 		folderDeletePath := c.Query("path")
 		err := cloudio.deleteFolder(folderDeletePath)
 
@@ -133,7 +95,7 @@ func main() {
 		}
 	})
 
-	r.GET("/tags/", func(c *gin.Context) {
+	private.GET("/list/tags/", func(c *gin.Context) {
 		tags, err := gc.FileStructDB.ListTags()
 
 		if err != nil {
@@ -144,13 +106,11 @@ func main() {
 		c.JSON(http.StatusOK, tags)
 	})
 
-	r.GET("/file/", func(c *gin.Context) {
+	private.GET("/file/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "upload.html", gin.H{})
 	})
 
-	r.GET("/folder", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
+	private.GET("/folder", func(c *gin.Context) {
 		path := c.Query("path")
 		path = filepath.Clean(path)
 		err := cloudio.downloadFolder(*c, path)
@@ -161,7 +121,7 @@ func main() {
 		}
 	})
 
-	r.GET("/file/:key", func(c *gin.Context) {
+	private.GET("/file/:key", func(c *gin.Context) {
 		key := c.Param("key")
 		id, err := strconv.ParseInt(key, 10, 64)
 
@@ -176,8 +136,7 @@ func main() {
 		}
 	})
 
-	r.GET("/list/", func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	private.GET("/list/fs", func(c *gin.Context) {
 		path := c.Query("path")
 		tags := c.Query("tags")
 

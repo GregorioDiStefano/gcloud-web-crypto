@@ -5,7 +5,7 @@ import { WithContext as ReactTags } from 'react-tag-input';
 class Search extends Component {
   constructor(props) {
     super(props)
-    this.state = { showInputField: false, tags: [ {id:1, text: "Apples"}] }
+    this.state = { showInputField: false, tags: [] }
   }
 
   hideInputWhenTagsEmpty = () => {
@@ -49,10 +49,16 @@ class Search extends Component {
       this.setState({ tags: tags });
   }
 
+  handleTagChange = (tags) =>  {
+    this.props.tagsCallback(tags)
+  }
+
   render() {
     if (this.state.showInputField) {
       let tags = this.state.tags;
       let suggestions = ["Banana", "Mango", "Pear", "Apricot"]
+
+      this.handleTagChange(tags)
 
       return (
         <div onBlur={this.onBlur}>

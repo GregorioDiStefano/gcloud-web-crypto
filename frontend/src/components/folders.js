@@ -26,7 +26,7 @@ updateFolder = (path) => {
   this.setState({ showFileInfo: false})
   var self = this
   request
-    .get('http://localhost:3000/list/?path=' + path)
+    .get('/list/fs/?path=' + path)
     .end(function(err, res){
       if(err) throw err;
       self.setState({ fs: JSON.parse(res.text) });
@@ -43,6 +43,7 @@ navigate = (row) => {
                     fileName: row["filename"],
                     fileSize: row["filesize"],
                     fileMD5Hash: row["md5"],
+                    fileTags: row["tags"],
                     fileUploadDate: row["upload_date"]})
     this.setState({ showFileInfo: true })
   }
@@ -60,7 +61,7 @@ promptRemoveDialog = (e, deleteType, deleteInfo) => {
 removeFile = (deleteID) => {
   var self = this
   request
-  .del('http://127.0.0.1:3000/file/' + deleteID)
+  .del('/file/' + deleteID)
   .end(function(err, res){
     console.log(err, res)
     if (err) throw err;
@@ -71,7 +72,7 @@ removeFile = (deleteID) => {
 removeFolder = (deleteID) => {
   var self = this
   request
-  .del('http://127.0.0.1:3000/folder?path=' + deleteID)
+  .del('/folder?path=' + deleteID)
   .end(function(err, res){
     console.log(err, res)
     if (err) throw err;
@@ -83,7 +84,7 @@ downloadFile = (e, d) => {
   e.stopPropagation()
   var uuid = d.ID
   request
-  .get('http://127.0.0.1:3000/file/' + uuid)
+  .get('/file/' + uuid)
   .end(function(err, res){
     if (err) throw err;
   });
@@ -91,7 +92,7 @@ downloadFile = (e, d) => {
 
 iconFormatter = (cell, row) => {
   if (row["type"] == "folder") {
-    var folderDownloadLink = "http://127.0.0.1:3000/folder?path=" + "/" + row.fullpath + "/"
+    var folderDownloadLink = "/folder?path=" + "/" + row.fullpath + "/"
     return (
       <div>
         <i className="glyphicon glyphicon-folder-open"></i>
@@ -100,7 +101,7 @@ iconFormatter = (cell, row) => {
       </div>
       );
   } else {
-    var downloadLink = "http://127.0.0.1:3000/file/" + row.id
+    var downloadLink = "/file/" + row.id
     return (
       <div>
         <i className="glyphicon glyphicon-file" ></i>
@@ -160,7 +161,6 @@ render() {
         var obj = sourcedata[key]
         console.dir(obj)
         folders.push(obj)
-
 
           /*{ "id": key,
                        "type": obj["Type"],
@@ -224,6 +224,7 @@ render() {
                     fileType={this.state.fileType}
                     fileMD5Hash={this.state.fileMD5Hash}
                     fileSize={this.state.fileSize}
+                    fileTags={this.state.fileTags}
                     fileUploadDate={this.state.fileUploadDate}>
             </FileInfo>
         : null }
@@ -231,7 +232,7 @@ render() {
         <BootstrapTable data={folders} striped={false} hover={true} options={options} bordered={ false } condensed>
           <TableHeaderColumn isKey={true} dataField="type" dataFormat={this.iconFormatter} onClick={this.displayInformation} dataSort width='80'></TableHeaderColumn>
           <TableHeaderColumn dataField="folder">Name</TableHeaderColumn>
-          <TableHeaderColumn dataField="size" dataFormat={this.fileSizeFormatter} width='100'>Size</TableHeaderColumn>
+          <TableHeaderColumn dataField="filesize" dataFormat={this.fileSizeFormatter} width='100'>Size</TableHeaderColumn>
           <TableHeaderColumn dataField="upload_date" dataFormat={this.normalizeDate} width='150'>Uploaded</TableHeaderColumn>
         </BootstrapTable>
         <SweetAlert

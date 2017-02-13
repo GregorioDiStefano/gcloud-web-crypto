@@ -4,20 +4,17 @@ import Progress from 'react-progressbar'
 import superagent from 'superagent'
 import SweetAlert from 'sweetalert-react';
 import Header from './header.js';
+import Search from './search.js';
 
 class Upload extends React.Component {
 
   constructor(props) {
     super(props)
     let formValue = createValue({
-      value: props.value,
-      onChange: this.onChange.bind(this)
+      value: props.value
     })
     this.state = {formValue}
-  }
-
-  onChange(formValue) {
-    this.setState({formValue})
+    this.tags = {}
   }
 
   componentDidMount() {
@@ -28,17 +25,23 @@ class Upload extends React.Component {
   onUpload = (e) => {
     e.preventDefault();
     this.setState({"uploadError": false, "uploadComplete": false})
+
     var form = document.getElementById("uploadForm"),
         fd  = new FormData(form),
         self = this;
 
-    superagent.post('http://127.0.0.1:3000/file/')
+    if (this.tags.length > 0) {
+      let tagText = this.tags.map(function(tag) {return tag.text;});
+      fd.append("tags", tagText.join(","))
+    }
+
+    superagent.post('/file/')
               .on('progress', function(e) {
                   self.setState({"uploadProgress": e.percent})
                })
                .send(fd)
                .end(function(err, response) {
-                  self.setState({"uploadProgress": 0})
+                    self.setState({"uploadProgress": 0})
                   if (err) {
                     self.setState({"uploadError": true, "uploadErrorMessage": response.text})
                   } else {
@@ -47,11 +50,15 @@ class Upload extends React.Component {
                });
     }
 
+  tagsCallback = (tags) => {
+    this.tags = tags
+  }
+
   render() {
     return (
     <div>
       <Header/>
-      <form id="uploadForm" className="form-horizontal" action="http://127.0.0.1:3000/file/" method="post" encType="multipart/form-data" ref="uploadForm">
+      <form id="uploadForm" className="form-horizontal" action="/file/" method="post" encType="multipart/form-data" ref="uploadForm">
         <Fieldset formValue={this.state.formValue}>
 
           <div className="form-group">
@@ -83,14 +90,12 @@ class Upload extends React.Component {
             <span className="help-block"></span>
             </div>
           </div>
-
           <div className="form-group">
             <label className="col-md-4 control-label" htmlFor="taginput">Tags</label>
             <div className="col-md-4">
-              <input id="taginput" name="tags" type="text" value="Video, 4K" data-role="tagsinput"/>
+                <Search tagsCallback={this.tagsCallback}/>
             </div>
           </div>
-
           <div className="form-group">
             <label className="col-md-4 control-label" htmlFor="singlebutton"></label>
             <div className="col-md-4">
