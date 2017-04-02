@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -11,9 +11,9 @@ import (
 
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 	crypto "github.com/GregorioDiStefano/gcloud-web-crypto/app/crypto"
-	jwt_lib "github.com/dgrijalva/jwt-go"
+	zxcvbn "github.com/nbutton23/zxcvbn-go"
+	"gopkg.in/appleboy/gin-jwt.v2"
 
-	"github.com/gin-gonic/contrib/jwt"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,32 +25,109 @@ const (
 func main() {
 	r := gin.Default()
 
+	adminLoggedIn := false
 	private := r.Group("/auth")
-	cryptoKey := crypto.CryptoKey{Key: gc.Password}
-	cloudio := cloudIO{cryptoKey: cryptoKey, storageBucket: gc.StorageBucket}
+	cryptoKey := new(crypto.CryptoKey)
+	cloudio := new(cloudIO)
 
-	if AUTH_ENABLED {
-		private.Use(jwt.Auth(gc.SecretKey))
+	authMiddleware := &jwt.GinJWTMiddleware{
+		Realm:      "auth",
+		Key:        []byte(gc.SecretKey),
+		Timeout:    time.Hour * 24 * 7,
+		MaxRefresh: time.Hour * 24,
+		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+			if userId == "admin" && verifyAdminPassword([]byte(password)) == nil {
+				ph, err := gc.PasswordDB.GetCryptoPasswordHash()
+
+				if err != nil {
+					return userId, false
+				}
+
+				if password, err := passwordToCryptoKey([]byte(password), ph.Salt, ph.Iterations); err != nil {
+					return userId, false
+				} else {
+					adminLoggedIn = true
+					setupKey := crypto.CryptoKey{Key: password}
+					fileCryptoKey, err := setupKey.DecryptText(ph.EncryptedPGPKey)
+					fmt.Println(fileCryptoKey, err)
+					cryptoKey = &crypto.CryptoKey{Key: fileCryptoKey}
+					cloudio = &cloudIO{cryptoKey: *cryptoKey, storageBucket: gc.StorageBucket}
+					return userId, true
+				}
+			}
+			return userId, false
+		},
+		Authorizator: func(userId string, c *gin.Context) bool {
+			if !adminLoggedIn {
+				return false
+			}
+
+			if userId == "admin" {
+				return true
+			}
+
+			return false
+		},
+		Unauthorized: func(c *gin.Context, code int, message string) {
+			c.JSON(code, gin.H{
+				"code":    code,
+				"message": message,
+			})
+		},
+		TokenLookup: "cookie:jwt",
+		TimeFunc:    time.Now,
 	}
 
-	r.POST("/account/login", func(c *gin.Context) {
-		if passwordFromForm, ok := c.GetPostForm("password"); !ok || !bytes.Equal([]byte(passwordFromForm), gc.PlainTextPassword) {
-			c.Status(http.StatusForbidden)
+	if AUTH_ENABLED {
+		private.Use(authMiddleware.MiddlewareFunc())
+	}
+
+	r.POST("/account/login", authMiddleware.LoginHandler)
+
+	r.POST("/account/signup", func(c *gin.Context) {
+		type signup struct {
+			Password string `form:"password" json:"password"`
+		}
+
+		var signupRequest signup
+		if err := c.BindJSON(&signupRequest); err != nil {
+			c.JSON(401, gin.H{"status": "unauthorized"})
 			return
 		}
 
-		token := jwt_lib.New(jwt_lib.GetSigningMethod("HS256"))
+		password := signupRequest.Password
+		passwordInfo := zxcvbn.PasswordStrength(string(password), []string{})
 
-		token.Claims = jwt_lib.MapClaims{
-			"id":  "admin",
-			"exp": time.Now().Add(time.Hour * 24 * 30).Unix(),
+		if passwordInfo.Score < 3 {
+			panic("The password you picked isn't secure enough.")
 		}
 
-		tokenString, err := token.SignedString([]byte(gc.SecretKey))
+		iterations := 50000
+		salt := make([]byte, 32)
+		rand.Read(salt)
+
+		newPasswordHash, err := generatePasswordHash([]byte(password))
+
 		if err != nil {
-			c.JSON(500, gin.H{"message": "Could not generate token"})
+			panic(err)
 		}
-		c.JSON(200, gin.H{"token": tokenString})
+
+		pgpKey, _ := crypto.RandomBytes(32)
+		encryptionPassword, err := passwordToCryptoKey([]byte(password), salt, iterations)
+		fmt.Println(err)
+		cr := crypto.CryptoKey{Key: []byte(encryptionPassword)}
+
+		encryptedPGPKey, err := cr.EncryptText(pgpKey)
+		fmt.Println(err)
+		passwordHash := &gc.PasswordHash{
+			CreatedDate:     time.Now(),
+			Hash:            newPasswordHash,
+			EncryptedPGPKey: encryptedPGPKey,
+			Iterations:      iterations,
+			Salt:            salt,
+		}
+
+		gc.PasswordDB.SetCryptoPasswordHash(passwordHash)
 	})
 
 	private.POST("/file/", func(c *gin.Context) {
@@ -106,36 +183,6 @@ func main() {
 		c.JSON(http.StatusOK, tags)
 	})
 
-	private.GET("/file/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "upload.html", gin.H{})
-	})
-
-	private.GET("/folder", func(c *gin.Context) {
-		path := c.Query("path")
-		path = filepath.Clean(path)
-		err := cloudio.downloadFolder(*c, path)
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, err)
-			return
-		}
-	})
-
-	private.GET("/file/:key", func(c *gin.Context) {
-		key := c.Param("key")
-		id, err := strconv.ParseInt(key, 10, 64)
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, err)
-			return
-		}
-
-		if err := cloudio.downloadFile(c, id); err != nil {
-			c.JSON(http.StatusInternalServerError, err.Error())
-			return
-		}
-	})
-
 	private.GET("/list/fs", func(c *gin.Context) {
 		path := c.Query("path")
 		tags := c.Query("tags")
@@ -168,5 +215,31 @@ func main() {
 			c.IndentedJSON(http.StatusOK, fs)
 		}
 	})
+
+	private.GET("/folder", func(c *gin.Context) {
+		path := c.Query("path")
+		path = filepath.Clean(path)
+
+		if err := cloudio.downloadFolder(*c, path); err != nil {
+			c.JSON(http.StatusInternalServerError, err)
+			return
+		}
+	})
+
+	private.GET("/file/:key", func(c *gin.Context) {
+		key := c.Param("key")
+		id, err := strconv.ParseInt(key, 10, 64)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err)
+			return
+		}
+
+		if err := cloudio.downloadFile(c, id); err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+	})
+
 	r.Run(":3000")
 }

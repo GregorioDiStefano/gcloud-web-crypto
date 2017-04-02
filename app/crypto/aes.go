@@ -15,6 +15,13 @@ type CryptoKey struct {
 	Key []byte
 }
 
+func RandomBytes(length int) ([]byte, error) {
+	b := make([]byte, length)
+	_, err := rand.Read(b)
+
+	return b, err
+}
+
 func (ac *CryptoKey) EncryptText(str []byte) ([]byte, error) {
 	plaintext := []byte(str)
 

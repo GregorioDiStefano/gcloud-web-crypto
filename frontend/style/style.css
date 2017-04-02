@@ -37,11 +37,12 @@ a {
 }
 
 #headerMenu {
-	width: 200px;
+	width: 400px;
   border-bottom: 1px solid;
 	display: flex;
 	justify-content: space-between;
 	margin: 10px 0px 20px 0px;
+	background-color: ghostwhite;
 }
 
 .center {

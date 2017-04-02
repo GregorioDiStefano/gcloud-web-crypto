@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node ./node_modules/webpack-dev-server/bin/webpack-dev-server.js",
     "test": "mocha --compilers js:babel-core/register --require ./test/test_helper.js --recursive ./test",
-    "test:watch": "npm run test -- --watch"
+    "test:watch": "npm run test -- --watch",
+    "build": "webpack --config webpack.production.config.js --progress --profile --colors",
+    "lint": "eslint --ext js --ext jsx src || exit 0",
+    "dev": " webpack-dashboard -- webpack-dev-server --hot --inline --progress --profile --colors"
   },
   "author": "",
   "license": "ISC",
@@ -25,8 +28,20 @@
     "react-addons-test-utils": "^0.14.7",
     "react-datatable": "0.0.31",
     "style-loader": "^0.13.1",
-    "webpack": "^1.12.9",
-    "webpack-dev-server": "^1.14.0"
+    "css-loader": "0.26.1",
+    "extract-text-webpack-plugin": "^v2.0.0-rc.1",
+    "file-loader": "^0.10.0",
+    "html-webpack-plugin": "^2.26.0",
+    "postcss-loader": "^1.2.2",
+    "react-hot-loader": "^3.0.0-beta.6",
+    "style-loader": "0.13.1",
+    "url-loader": "0.5.7",
+    "webpack": "^2.2.1",
+    "webpack-cleanup-plugin": "^0.4.2",
+    "webpack-dashboard": "^0.3.0",
+    "webpack-dev-server": "^2.4.1",
+    "react-addons-css-transition-group": "^15.4.2",
+    "superagent": "^3.5.2"
   },
   "dependencies": {
     "babel-preset-stage-1": "^6.1.18",

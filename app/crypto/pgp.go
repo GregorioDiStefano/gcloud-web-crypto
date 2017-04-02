@@ -14,7 +14,7 @@ func init() {
 	packetConfig = packet.Config{
 		DefaultCipher:          packet.CipherAES256,
 		DefaultCompressionAlgo: packet.CompressionZLIB,
-		CompressionConfig:      &packet.CompressionConfig{Level: packet.BestSpeed},
+		CompressionConfig:      &packet.CompressionConfig{Level: packet.BestCompression},
 	}
 }
 

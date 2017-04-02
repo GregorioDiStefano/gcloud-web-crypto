@@ -7,6 +7,7 @@ class Header extends Component {
       <div id="headerMenu">
         <Link to={`/dir`}>NAVIGATE</Link>
         <Link to={`/upload`}>UPLOAD</Link>
+        <Link to={`/logout`}>LOGOUT</Link>
       </div>
     );
   }

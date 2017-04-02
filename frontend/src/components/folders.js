@@ -26,7 +26,7 @@ updateFolder = (path) => {
   this.setState({ showFileInfo: false})
   var self = this
   request
-    .get('/list/fs/?path=' + path)
+    .get('/auth/list/fs/?path=' + path)
     .end(function(err, res){
       if(err) throw err;
       self.setState({ fs: JSON.parse(res.text) });
@@ -61,7 +61,7 @@ promptRemoveDialog = (e, deleteType, deleteInfo) => {
 removeFile = (deleteID) => {
   var self = this
   request
-  .del('/file/' + deleteID)
+  .del('/auth/file/' + deleteID)
   .end(function(err, res){
     console.log(err, res)
     if (err) throw err;
@@ -72,7 +72,7 @@ removeFile = (deleteID) => {
 removeFolder = (deleteID) => {
   var self = this
   request
-  .del('/folder?path=' + deleteID)
+  .del('/auth/folder?path=' + deleteID)
   .end(function(err, res){
     console.log(err, res)
     if (err) throw err;
@@ -84,7 +84,7 @@ downloadFile = (e, d) => {
   e.stopPropagation()
   var uuid = d.ID
   request
-  .get('/file/' + uuid)
+  .get('/auth/file/' + uuid)
   .end(function(err, res){
     if (err) throw err;
   });
@@ -92,7 +92,7 @@ downloadFile = (e, d) => {
 
 iconFormatter = (cell, row) => {
   if (row["type"] == "folder") {
-    var folderDownloadLink = "/folder?path=" + "/" + row.fullpath + "/"
+    var folderDownloadLink = "/auth/folder?path=" + "/" + row.fullpath + "/"
     return (
       <div>
         <i className="glyphicon glyphicon-folder-open"></i>
@@ -101,7 +101,7 @@ iconFormatter = (cell, row) => {
       </div>
       );
   } else {
-    var downloadLink = "/file/" + row.id
+    var downloadLink = "/auth/file/" + row.id
     return (
       <div>
         <i className="glyphicon glyphicon-file" ></i>

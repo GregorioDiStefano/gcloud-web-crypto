@@ -195,7 +195,6 @@ func (db *datastoreDB) DeleteFile(id int64) error {
 
 func (db *datastoreDB) DeleteFolder(key int64) error {
 	ctx := context.Background()
-
 	err := db.client.Delete(ctx, &datastore.Key{ID: key, Kind: "FolderStruct"})
 
 	if err != nil {
@@ -203,6 +202,18 @@ func (db *datastoreDB) DeleteFolder(key int64) error {
 		return err
 	}
 	return nil
+}
+
+func (db *datastoreDB) FilenameHMACExists(searchHMAC string) bool {
+	ctx := context.Background()
+	fmt.Println("looking for:", searchHMAC)
+	q := datastore.NewQuery("FileStruct").Filter("FilenameHMAC = ", searchHMAC)
+
+	encfile := make([]File, 0)
+	_, err := db.client.GetAll(ctx, q, &encfile)
+
+	fmt.Println("encfile: ", encfile, err == nil && len(encfile) > 0)
+	return err == nil && len(encfile) > 0
 }
 
 func (db *datastoreDB) SetCryptoPasswordHash(ph *PasswordHash) error {

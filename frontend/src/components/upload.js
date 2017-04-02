@@ -35,7 +35,7 @@ class Upload extends React.Component {
       fd.append("tags", tagText.join(","))
     }
 
-    superagent.post('/file/')
+    superagent.post('/auth/file/')
               .on('progress', function(e) {
                   self.setState({"uploadProgress": e.percent})
                })
@@ -58,7 +58,7 @@ class Upload extends React.Component {
     return (
     <div>
       <Header/>
-      <form id="uploadForm" className="form-horizontal" action="/file/" method="post" encType="multipart/form-data" ref="uploadForm">
+      <form id="uploadForm" className="form-horizontal" action="/auth/file/" method="post" encType="multipart/form-data" ref="uploadForm">
         <Fieldset formValue={this.state.formValue}>
 
           <div className="form-group">

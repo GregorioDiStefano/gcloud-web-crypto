@@ -19,6 +19,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	errorFileIsDuplicate = "this filename already exists in folder"
+)
+
+func (cio *cloudIO) isFileDuplicate(plaintextFolder, plaintextFilename string) bool {
+	fullPath := []byte(plaintextFolder + plaintextFilename)
+	hmac := cio.cryptoKey.GenerateHMAC(fullPath)
+	return gc.FileStructDB.FilenameHMACExists(hmac)
+}
+
 func (cio *cloudIO) doUpload(title string, description string, virtualFolder string, tags []string, fh *multipart.FileHeader) error {
 	f, err := fh.Open()
 
@@ -28,7 +38,6 @@ func (cio *cloudIO) doUpload(title string, description string, virtualFolder str
 
 	folder := normalizeFolder(filepath.Join("/", virtualFolder, filepath.Dir(fh.Filename)))
 
-	fmt.Println("folder: ", folder)
 	_, filename := filepath.Split(fh.Filename)
 	filetype := fh.Header.Get("Content-Type")
 
@@ -40,25 +49,29 @@ func (cio *cloudIO) doUpload(title string, description string, virtualFolder str
 	}
 
 	f.Seek(0, 0)
-
 	md5HashHex := md5Hash.Sum(nil)
-	//TODO: check for file duplicates
+
+	if cio.isFileDuplicate(folder, filename) {
+		fmt.Println("file is duplicate")
+		return fmt.Errorf(errorFileIsDuplicate)
+	}
 
 	fmt.Println("Uploading file:", filename)
 
-	if encryptedFile, err := cio.cryptoKey.EncryptText([]byte(filename)); err != nil {
+	if encryptedFilename, err := cio.cryptoKey.EncryptText([]byte(filename)); err != nil {
 		fmt.Println(err)
 		return err
 	} else {
 		newFile := &gc.File{
-			UploadDate:  time.Now(),
-			MD5:         fmt.Sprintf("%x", md5HashHex),
-			Folder:      folder,
-			Filename:    encryptedFile,
-			FileSize:    filesize,
-			FileType:    filetype,
-			Description: description,
-			Tags:        tags}
+			UploadDate:   time.Now(),
+			MD5:          fmt.Sprintf("%x", md5HashHex),
+			Folder:       folder,
+			Filename:     encryptedFilename,
+			FilenameHMAC: cio.cryptoKey.GenerateHMAC([]byte(folder + filename)),
+			FileSize:     filesize,
+			FileType:     filetype,
+			Description:  description,
+			Tags:         tags}
 
 		newFileID, err := gc.FileStructDB.AddFile(newFile)
 
@@ -76,6 +89,8 @@ func (cio *cloudIO) doUpload(title string, description string, virtualFolder str
 
 func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 	var tags []string
+
+	errorsSeen := false
 
 	title := c.PostForm("title")
 	description := c.PostForm("description")
@@ -105,12 +120,14 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 	uploadTasks := make(chan multipart.FileHeader, 64)
 	var wg sync.WaitGroup
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
 			for fh := range uploadTasks {
-				// ignore errors
-				cio.doUpload(title, description, virtualFolder, tags, &fh)
+				if err := cio.doUpload(title, description, virtualFolder, tags, &fh); err != nil {
+					errorsSeen = true
+					fmt.Println("error occured while uploading: ", err.Error())
+				}
 			}
 			wg.Done()
 		}()
@@ -123,7 +140,11 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 	close(uploadTasks)
 	wg.Wait()
 
-	return nil
+	if errorsSeen {
+		return fmt.Errorf("error occured while uploading")
+	} else {
+		return nil
+	}
 }
 
 func (cio *cloudIO) uploadFileFromForm(fh *multipart.FileHeader, f multipart.File, key int64) (err error) {

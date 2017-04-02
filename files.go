@@ -6,15 +6,16 @@ import (
 )
 
 type File struct {
-	ID          int64 `datastore:"-"`
-	Filename    []byte
-	Folder      string
-	FileType    string
-	FileSize    int64
-	UploadDate  time.Time
-	Description string
-	Tags        []string
-	MD5         string
+	ID           int64 `datastore:"-"`
+	Filename     []byte
+	FilenameHMAC string
+	Folder       string
+	FileType     string
+	FileSize     int64
+	UploadDate   time.Time
+	Description  string
+	Tags         []string
+	MD5          string
 }
 
 type FolderTree struct {
@@ -32,6 +33,7 @@ type FileDatabase interface {
 	ListFolders(string) ([]FolderTree, int64, error)
 	AddFolder(f *FolderTree) (int64, error)
 	AddFile(f *File) (id int64, err error)
+	FilenameHMACExists(string) bool
 	GetFile(id int64) (*File, error)
 	DeleteFile(id int64) error
 	DeleteFolder(id int64) error

@@ -4,6 +4,7 @@ import Folder from './components/folders'
 import Upload from './components/upload'
 import request from 'superagent'
 import Login from './components/login'
+import Signup from './components/signup'
 import { Router, Route, Redirect, Link, browserHistory } from 'react-router'
 
 class App extends Component {
@@ -12,16 +13,25 @@ class App extends Component {
   }
 
     userIsAuthenticated = (nextState, replace) => {
-        if (localStorage.getItem("jwt") == null) {
-          replace(`/login`)
+        var self = this
+        if (!document.cookie.startsWith("jwt=")) {
+          replace({ pathname: `/login`, state: { nextPathname: nextState.location.pathname }})
         }
+    }
+
+    logoutUser = (nextState, replace) => {
+      document.cookie = "jwt=;expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      browserHistory.push("/login")
     }
 
     render() {
       return (
       <Router history={browserHistory}>
-            <Route path="/" component={Folder} onEnter={this.userIsAuthenticated}/>
+            <Route path="/" component={Folder} onEnter={this.userIsAuthenticated} />
+            <Router path="/signup" component={Signup} />
             <Router path="/login" component={Login} />
+            <Router path="/dir" component={Folder} onEnter={this.userIsAuthenticated} />
+            <Router path="/logout" onEnter={this.logoutUser} component={Login} />
             <Route path="upload" component={Upload} onEnter={this.userIsAuthenticated}/>
       </Router>
       );
