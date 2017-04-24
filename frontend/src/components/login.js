@@ -21,7 +21,7 @@ class Login extends Component {
       .send({ "username": "admin", "password": document.forms.item(0)[1].value })
       .end(function(error, response){
         if(error) {
-          if (response.statusCode == 403) {
+          if (response.statusCode == 401) {
             self.setState({"wrongPassword": true})
           }
         } else {

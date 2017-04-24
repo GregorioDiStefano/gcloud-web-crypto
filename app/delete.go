@@ -68,7 +68,7 @@ func (cIO *cloudIO) deleteFolder(folderPath string) error {
 	}
 
 	deleteTasks := make(chan int64, 64)
-	for i := 0; i < 25; i++ {
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			for id := range deleteTasks {

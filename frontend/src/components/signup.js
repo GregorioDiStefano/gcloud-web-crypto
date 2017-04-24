@@ -1,11 +1,12 @@
 import React, { Component } from 'react'
 import request from 'superagent'
+import { browserHistory } from 'react-router'
 
 class Signup extends Component {
   constructor(props) {
     super(props)
 
-    this.state = {password1: "", password2: ""}
+    this.state = {password1: "", password2: "", disabledSubmit: true}
   }
 
   onSubmit = (e) => {
@@ -13,39 +14,29 @@ class Signup extends Component {
     var self = this;
     request
       .post('/account/signup')
-      .type('form')
-      .send({password: document.forms.item(0)[1].value })
+      .set('Content-Type', 'application/json')
+      .send({ "password": self.state.password1 })
       .end(function(error, response){
         if(error) {
           if (response.statusCode == 403) {
-            self.setState({"wrongPassword": true})
-          }
+            self.setState({"signupFail": true})
+          } else if (response.statusCode == 409) {
+	    self.setState({"accountExists": true})
+	  }
         } else {
-          self.setState({"wrongPassword": false})
-
-          var token = JSON.parse(response.text)["token"]
-          document.cookie = "jwt=" + token;
-
-          if (self.props.location.state != null) {
-            browserHistory.push(self.props.location.state.nextPathname)
-          } else {
-            browserHistory.push(`/dir`)
+            browserHistory.push(`/login`)
           }
-        }
-      });
-  }
+        })
+      }
 
-  verifyPassword1 = (e) => {
-    this.setState({password1: e.target.value}, function(){
-      console.log(this.state)
-      console.log(this.state.password1 == this.state.password2)
-    })
-  }
-
-  verifyPassword2 = (e) => {
-    this.setState({password2: e.target.value}, function(){
-      console.log(this.state)
-      console.log(this.state.password1 == this.state.password2)
+  verifyPassword = (e) => {
+    self = this
+    this.setState({[e.target.id]:  e.target.value}, function(){
+      if (this.state.password1 == this.state.password2 && this.state.password1 != "") {
+        self.setState({disabledSubmit: false})
+      } else {
+        self.setState({disabledSubmit: true})
+      }
     })
   }
 
@@ -63,19 +54,19 @@ class Signup extends Component {
            <div className="form-group">
              <label className="col-md-4 control-label" htmlFor="password">Password</label>
              <div className="col-md-4">
-               <input id="password1" name="password" type="password" className="form-control input-md" onChange={this.verifyPassword1} required />
+               <input id="password1" name="password" type="password" className="form-control input-md" onChange={this.verifyPassword} required />
              </div>
            </div>
            <div className="form-group">
              <label className="col-md-4 control-label" htmlFor="password">Password (repeat)</label>
              <div className="col-md-4">
-               <input id="password2" name="password" type="password" className="form-control input-md" onChange={this.verifyPassword2} required />
+               <input id="password2" name="password" type="password" className="form-control input-md" onChange={this.verifyPassword} required />
              </div>
            </div>
            <div className="form-group">
              <label className="col-md-4 control-label" htmlFor="singlebutton" />
              <div className="col-md-4">
-             <input type="submit" id="singlebutton" name="singlebutton" className="center btn btn-primary" value="Signup" disabled/>
+             <input type="submit" id="singlebutton" name="singlebutton" className="center btn btn-primary" value="Signup" disabled={this.state.disabledSubmit}/>
            </div>
            </div>
          </fieldset>

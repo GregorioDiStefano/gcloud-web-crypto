@@ -12,7 +12,8 @@ const (
 )
 
 type CryptoKey struct {
-	Key []byte
+	Key        []byte
+	HMACSecret []byte
 }
 
 func RandomBytes(length int) ([]byte, error) {

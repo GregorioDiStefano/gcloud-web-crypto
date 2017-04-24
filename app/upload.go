@@ -89,7 +89,7 @@ func (cio *cloudIO) doUpload(title string, description string, virtualFolder str
 
 func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 	var tags []string
-
+	fmt.Println("cio: ", cio.cryptoKey.Key)
 	errorsSeen := false
 
 	title := c.PostForm("title")

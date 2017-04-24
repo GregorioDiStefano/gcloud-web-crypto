@@ -12,7 +12,6 @@ import (
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 	crypto "github.com/GregorioDiStefano/gcloud-web-crypto/app/crypto"
 	zxcvbn "github.com/nbutton23/zxcvbn-go"
-	"gopkg.in/appleboy/gin-jwt.v2"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,70 +22,28 @@ const (
 )
 
 func main() {
+	cryptoKey := &crypto.CryptoKey{}
+	cloudio := &cloudIO{}
+
 	r := gin.Default()
-
-	adminLoggedIn := false
 	private := r.Group("/auth")
-	cryptoKey := new(crypto.CryptoKey)
-	cloudio := new(cloudIO)
 
-	authMiddleware := &jwt.GinJWTMiddleware{
-		Realm:      "auth",
-		Key:        []byte(gc.SecretKey),
-		Timeout:    time.Hour * 24 * 7,
-		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
-			if userId == "admin" && verifyAdminPassword([]byte(password)) == nil {
-				ph, err := gc.PasswordDB.GetCryptoPasswordHash()
-
-				if err != nil {
-					return userId, false
-				}
-
-				if password, err := passwordToCryptoKey([]byte(password), ph.Salt, ph.Iterations); err != nil {
-					return userId, false
-				} else {
-					adminLoggedIn = true
-					setupKey := crypto.CryptoKey{Key: password}
-					fileCryptoKey, err := setupKey.DecryptText(ph.EncryptedPGPKey)
-					fmt.Println(fileCryptoKey, err)
-					cryptoKey = &crypto.CryptoKey{Key: fileCryptoKey}
-					cloudio = &cloudIO{cryptoKey: *cryptoKey, storageBucket: gc.StorageBucket}
-					return userId, true
-				}
-			}
-			return userId, false
-		},
-		Authorizator: func(userId string, c *gin.Context) bool {
-			if !adminLoggedIn {
-				return false
-			}
-
-			if userId == "admin" {
-				return true
-			}
-
-			return false
-		},
-		Unauthorized: func(c *gin.Context, code int, message string) {
-			c.JSON(code, gin.H{
-				"code":    code,
-				"message": message,
-			})
-		},
-		TokenLookup: "cookie:jwt",
-		TimeFunc:    time.Now,
-	}
+	setupMiddleware(cryptoKey, cloudio)
 
 	if AUTH_ENABLED {
-		private.Use(authMiddleware.MiddlewareFunc())
+		private.Use(jwtMiddleware.MiddlewareFunc())
 	}
 
-	r.POST("/account/login", authMiddleware.LoginHandler)
+	r.POST("/account/login", jwtMiddleware.LoginHandler)
 
 	r.POST("/account/signup", func(c *gin.Context) {
 		type signup struct {
 			Password string `form:"password" json:"password"`
+		}
+
+		if passwordData, _ := gc.PasswordDB.GetCryptoPasswordHash(); passwordData != nil {
+			c.JSON(409, gin.H{"status": "account already exists"})
+			return
 		}
 
 		var signupRequest signup
@@ -99,7 +56,8 @@ func main() {
 		passwordInfo := zxcvbn.PasswordStrength(string(password), []string{})
 
 		if passwordInfo.Score < 3 {
-			panic("The password you picked isn't secure enough.")
+			c.JSON(401, gin.H{"status": "the password you picked isn't secure enough."})
+			return
 		}
 
 		iterations := 50000
@@ -113,18 +71,20 @@ func main() {
 		}
 
 		pgpKey, _ := crypto.RandomBytes(32)
-		encryptionPassword, err := passwordToCryptoKey([]byte(password), salt, iterations)
-		fmt.Println(err)
-		cr := crypto.CryptoKey{Key: []byte(encryptionPassword)}
+		hmacSecret, _ := crypto.RandomBytes(32)
 
-		encryptedPGPKey, err := cr.EncryptText(pgpKey)
-		fmt.Println(err)
+		fmt.Println("creating hmac secret: ", hmacSecret)
+
+		encryptedPGPKey, err := encrypt([]byte(password), pgpKey, salt, iterations)
+		encryptedHMACSecret, err := encrypt([]byte(password), hmacSecret, salt, iterations)
+
 		passwordHash := &gc.PasswordHash{
-			CreatedDate:     time.Now(),
-			Hash:            newPasswordHash,
-			EncryptedPGPKey: encryptedPGPKey,
-			Iterations:      iterations,
-			Salt:            salt,
+			CreatedDate:         time.Now(),
+			Hash:                newPasswordHash,
+			EncryptedPGPKey:     encryptedPGPKey,
+			EncryptedHMACSecret: encryptedHMACSecret,
+			Iterations:          iterations,
+			Salt:                salt,
 		}
 
 		gc.PasswordDB.SetCryptoPasswordHash(passwordHash)

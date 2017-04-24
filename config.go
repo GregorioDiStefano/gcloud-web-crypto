@@ -2,7 +2,6 @@ package gscrypto
 
 import (
 	"log"
-	"os"
 
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/storage"
@@ -32,12 +31,6 @@ const ProjectID = "gscrypto-154621"
 
 func init() {
 	var err error
-
-	SecretKey = os.Getenv("SECRET_KEY")
-	if SecretKey == "" {
-		panic("Set SECRET_KEY environment variable.")
-	}
-
 	FileStructDB, err = configureDatastoreDB(ProjectID)
 
 	if err != nil {
