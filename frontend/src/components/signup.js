@@ -24,7 +24,10 @@ class Signup extends Component {
 	    self.setState({"accountExists": true})
 	  }
         } else {
-            browserHistory.push(`/login`)
+            // hack
+            setTimeout(function(){
+               browserHistory.push(`/login`)
+            }, 250);
           }
         })
       }

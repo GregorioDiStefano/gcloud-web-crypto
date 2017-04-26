@@ -36,6 +36,15 @@ func main() {
 
 	r.POST("/account/login", jwtMiddleware.LoginHandler)
 
+	r.GET("/account/status", func(c *gin.Context) {
+		// send 404 if no accounts exists else 204
+		if passwordData, _ := gc.PasswordDB.GetCryptoPasswordHash(); passwordData != nil {
+			c.Status(http.StatusNoContent)
+			return
+		}
+		c.Status(http.StatusNotFound)
+	})
+
 	r.POST("/account/signup", func(c *gin.Context) {
 		type signup struct {
 			Password string `form:"password" json:"password"`
@@ -60,7 +69,7 @@ func main() {
 			return
 		}
 
-		iterations := 50000
+		iterations := 100000
 		salt := make([]byte, 32)
 		rand.Read(salt)
 

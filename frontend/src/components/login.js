@@ -12,6 +12,17 @@ class Login extends Component {
     }
   }
 
+
+  componentDidMount = () => {
+    request
+      .get('/account/status')
+      .end(function(error, response) {
+         if (response.statusCode == 404) {
+            browserHistory.push(`/signup`)
+         }
+      })
+  }
+
   onSubmit = (e) => {
     e.preventDefault()
     var self = this;

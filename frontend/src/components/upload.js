@@ -13,7 +13,7 @@ class Upload extends React.Component {
     let formValue = createValue({
       value: props.value
     })
-    this.state = {formValue}
+    this.state = {formValue, uploadProgress: 0.0}
     this.tags = {}
   }
 
@@ -43,6 +43,7 @@ class Upload extends React.Component {
                .end(function(err, response) {
                     self.setState({"uploadProgress": 0})
                   if (err) {
+                    console.log("response.text: ", response.text)
                     self.setState({"uploadError": true, "uploadErrorMessage": response.text})
                   } else {
                     self.setState({"uploadComplete": true})
@@ -99,7 +100,7 @@ class Upload extends React.Component {
           <div className="form-group">
             <label className="col-md-4 control-label" htmlFor="singlebutton"></label>
             <div className="col-md-4">
-              <button id="singlebutton" name="singlebutton" className="btn btn-primary" onClick={this.onUpload}>Upload</button>
+              <button id="singlebutton" name="singlebutton" className="btn btn-primary" disabled={this.state.uploadProgress > 0} onClick={this.onUpload}>Upload</button>
             </div>
           </div>
         </Fieldset>
