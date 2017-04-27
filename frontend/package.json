@@ -57,6 +57,9 @@
     "react-tag-autocomplete": "^5.1.0",
     "react-tag-input": "^4.6.2",
     "redux": "^3.0.4",
-    "toetag": "^3.3.6"
+    "toetag": "^3.3.6",
+    "sweetalert-react": "0.4.9",
+    "react-progressbar": "1.4.6",
+    "react-forms": "beta"
   }
 }
