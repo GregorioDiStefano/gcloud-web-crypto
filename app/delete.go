@@ -43,9 +43,7 @@ func (cIO *cloudIO) deleteFolder(folderPath string) error {
 	}
 	nestedObjects, err := cIO.listFileSystem(folderPath)
 
-	if len(nestedObjects) == 0 {
-		return errors.New(errorDeletePathEmpty)
-	} else if err != nil {
+	if err != nil {
 		return err
 	}
 

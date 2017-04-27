@@ -17,9 +17,14 @@ class Folder extends Component {
       showDeleteFolder: false,
       showFileInfo: false,
     }
+    this.hideFileInfoHandler = this.hideFileInfoHandler.bind(this)
 
     this.currentFolder = "/"
     this.updateFolder("/")
+}
+
+hideFileInfoHandler = () => {
+  this.setState({ showFileInfo: false })
 }
 
 updateFolder = (path) => {
@@ -218,7 +223,8 @@ render() {
         <Search />
 
         { this.state.showFileInfo ?
-            <FileInfo fileName={this.state.fileName}
+            <FileInfo hideFileInfoHandler = {this.hideFileInfoHandler}
+                    fileName={this.state.fileName}
                     fileTitle={this.state.fileTitle}
                     fileDescription={this.state.fileDescription}
                     fileType={this.state.fileType}

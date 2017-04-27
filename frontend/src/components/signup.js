@@ -6,7 +6,7 @@ class Signup extends Component {
   constructor(props) {
     super(props)
 
-    this.state = {password1: "", password2: "", disabledSubmit: true}
+    this.state = {password1: "", password2: "", disabledSubmit: true, signupError: ""}
   }
 
   onSubmit = (e) => {
@@ -17,12 +17,10 @@ class Signup extends Component {
       .set('Content-Type', 'application/json')
       .send({ "password": self.state.password1 })
       .end(function(error, response){
-        if(error) {
-          if (response.statusCode == 403) {
-            self.setState({"signupFail": true})
-          } else if (response.statusCode == 409) {
-	    self.setState({"accountExists": true})
-	  }
+        if (response.statusCode != 200) {
+          if ("status" in response.body) {
+            self.setState({signupError: response.body["status"]})
+          }
         } else {
             // hack
             setTimeout(function(){
@@ -69,6 +67,7 @@ class Signup extends Component {
            <div className="form-group">
              <label className="col-md-4 control-label" htmlFor="singlebutton" />
              <div className="col-md-4">
+             <p className="center"> {this.state.signupError}</p>
              <input type="submit" id="singlebutton" name="singlebutton" className="center btn btn-primary" value="Signup" disabled={this.state.disabledSubmit}/>
            </div>
            </div>

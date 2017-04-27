@@ -28,12 +28,11 @@ func main() {
 	r := gin.Default()
 	private := r.Group("/auth")
 
-	setupMiddleware(cryptoKey, cloudio)
-
 	if AUTH_ENABLED {
 		private.Use(jwtMiddleware.MiddlewareFunc())
 	}
 
+	setupMiddleware(cryptoKey, cloudio)
 	r.POST("/account/login", jwtMiddleware.LoginHandler)
 
 	r.GET("/account/status", func(c *gin.Context) {
@@ -69,7 +68,7 @@ func main() {
 			return
 		}
 
-		iterations := 100000
+		iterations := 60000
 		salt := make([]byte, 32)
 		rand.Read(salt)
 
@@ -80,12 +79,21 @@ func main() {
 		}
 
 		pgpKey, _ := crypto.RandomBytes(32)
-		hmacSecret, _ := crypto.RandomBytes(32)
-
-		fmt.Println("creating hmac secret: ", hmacSecret)
+		hmacSecret, _ := crypto.RandomBytes(64)
 
 		encryptedPGPKey, err := encrypt([]byte(password), pgpKey, salt, iterations)
+
+		if err != nil {
+			c.JSON(500, gin.H{"error": "unable to encrypt pgp key"})
+			return
+		}
+
 		encryptedHMACSecret, err := encrypt([]byte(password), hmacSecret, salt, iterations)
+
+		if err != nil {
+			c.JSON(500, gin.H{"error": "unable to encrypt hmac secret"})
+			return
+		}
 
 		passwordHash := &gc.PasswordHash{
 			CreatedDate:         time.Now(),
@@ -103,10 +111,10 @@ func main() {
 		err := cloudio.processFileUpload(c)
 
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, map[string]string{"fail": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"fail": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, map[string]string{"upload": "success"})
+		c.JSON(http.StatusOK, gin.H{"upload": "success"})
 	})
 
 	private.DELETE("/file/:uuid", func(c *gin.Context) {

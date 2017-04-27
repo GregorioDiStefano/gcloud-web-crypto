@@ -96,8 +96,11 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 	description := c.PostForm("description")
 	virtualFolder := c.PostForm("virtfolder")
 
-	for _, v := range strings.Split(c.PostForm("tags"), ",") {
-		tags = append(tags, strings.TrimSpace(v))
+	for _, tag := range strings.Split(c.PostForm("tags"), ",") {
+		trimmedTag := strings.TrimSpace(tag)
+		if len(trimmedTag) > 0 {
+			tags = append(tags, strings.TrimSpace(tag))
+		}
 	}
 
 	allFiles := c.Request.MultipartForm.File["file"]
