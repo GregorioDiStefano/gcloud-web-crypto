@@ -45,7 +45,7 @@ navigate = (row) => {
   } else {
     this.setState({ fileType: row["filetype"],
                     fileDescription: row["description"],
-                    fileName: row["filename"],
+                    fileName: row["name"],
                     fileSize: row["filesize"],
                     fileMD5Hash: row["md5"],
                     fileTags: row["tags"],
@@ -164,25 +164,13 @@ render() {
     for (var key in sourcedata) {
       if (sourcedata.hasOwnProperty(key)) {
         var obj = sourcedata[key]
-        console.dir(obj)
         folders.push(obj)
-
-          /*{ "id": key,
-                       "type": obj["Type"],
-                       "folder": obj["Path"],
-                       "fullpath": obj["FullPath"],
-                       "location": obj["ObjectData"]["Folder"],
-                       "size": obj["ObjectData"]["FileSize"],
-                       "publishedDate": obj["ObjectData"]["UploadDate"],
-                       "fullDetails": obj})
-                       */
-        console.log(obj)
       }
     }
 
     const options = {
       onRowClick: this.navigate,
-      defaultSortName: 'folder',
+      defaultSortName: 'name',
       defaultSortOrder: 'asc'
     };
 
@@ -237,7 +225,7 @@ render() {
 
         <BootstrapTable data={folders} striped={false} hover={true} options={options} bordered={ false } condensed>
           <TableHeaderColumn isKey={true} dataField="type" dataFormat={this.iconFormatter} onClick={this.displayInformation} dataSort width='80'></TableHeaderColumn>
-          <TableHeaderColumn dataField="folder">Name</TableHeaderColumn>
+          <TableHeaderColumn dataField="name">Name</TableHeaderColumn>
           <TableHeaderColumn dataField="filesize" dataFormat={this.fileSizeFormatter} width='100'>Size</TableHeaderColumn>
           <TableHeaderColumn dataField="upload_date" dataFormat={this.normalizeDate} width='150'>Uploaded</TableHeaderColumn>
         </BootstrapTable>

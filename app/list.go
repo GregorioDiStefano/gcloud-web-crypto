@@ -11,13 +11,11 @@ import (
 type FileSystemStructure struct {
 	ID         int64     `json:"id"`
 	Type       string    `json:"type"`
-	Path       string    `json:"folder"`
+	Name       string    `json:"name"`
 	FullPath   string    `json:"fullpath"`
 	UploadDate time.Time `json:"upload_date"`
 
 	/* Only displayed for files */
-	Filename    string   `json:"filename,omitempty"`
-	Folder      string   `json:"folder2,omitempty"`
 	FileType    string   `json:"filetype,omitempty"`
 	FileSize    int64    `json:"filesize,omitempty"`
 	Description string   `json:"description,omitempty"`
@@ -55,29 +53,6 @@ func listAllNestedFiles(path string) []gc.File {
 	return nestedFiles
 }
 
-/*
-func listFilesWithTags(tags []string) ([]FileSystemStructure, error) {
-	fmt.Println("tags:", tags)
-	if files, err := gc.FileStructDB.ListFilesWithTags(tags); err != nil {
-		return nil, err
-	} else {
-		fs := []FileSystemStructure{}
-		fmt.Println(files)
-		for _, file := range files {
-			newFSEntry := FileSystemStructure{
-				ID:         0,
-				Type:       typeFilename,
-				Path:       file.Filename,
-				FullPath:   filepath.Clean(filepath.Join(file.Folder, file.Filename)),
-				ObjectData: file}
-			fs = append(fs, newFSEntry)
-		}
-
-		return fs, nil
-	}
-}
-*/
-
 func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 	path = normalizeFolder(filepath.Clean(path))
 	files, err := gc.FileStructDB.ListFiles(path)
@@ -99,10 +74,8 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 		newFSEntry := FileSystemStructure{
 			ID:          file.ID,
 			Type:        typeFilename,
-			Path:        string(plainTextFilename),
+			Name:        string(plainTextFilename),
 			FullPath:    filepath.Clean(filepath.Join(file.Folder, string(plainTextFilename))),
-			Filename:    string(plainTextFilename),
-			Folder:      file.Folder,
 			FileType:    file.FileType,
 			FileSize:    file.FileSize,
 			Description: file.Description,
@@ -123,7 +96,7 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 		newFSEntry := FileSystemStructure{
 			ID:         folder.ID,
 			Type:       typeFolder,
-			Path:       normalizeFolder(folder.Folder),
+			Name:       normalizeFolder(folder.Folder),
 			UploadDate: folder.UploadDate,
 			FullPath:   normalizeFolder(filepath.Join(path, folder.Folder))}
 		fs = append(fs, newFSEntry)

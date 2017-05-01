@@ -28,11 +28,11 @@ func main() {
 	r := gin.Default()
 	private := r.Group("/auth")
 
+	setupMiddleware(cryptoKey, cloudio)
 	if AUTH_ENABLED {
 		private.Use(jwtMiddleware.MiddlewareFunc())
 	}
 
-	setupMiddleware(cryptoKey, cloudio)
 	r.POST("/account/login", jwtMiddleware.LoginHandler)
 
 	r.GET("/account/status", func(c *gin.Context) {
@@ -81,14 +81,14 @@ func main() {
 		pgpKey, _ := crypto.RandomBytes(32)
 		hmacSecret, _ := crypto.RandomBytes(64)
 
-		encryptedPGPKey, err := encrypt([]byte(password), pgpKey, salt, iterations)
+		encryptedPGPKey, err := cryptoKey.EncryptText(pgpKey)
 
 		if err != nil {
 			c.JSON(500, gin.H{"error": "unable to encrypt pgp key"})
 			return
 		}
 
-		encryptedHMACSecret, err := encrypt([]byte(password), hmacSecret, salt, iterations)
+		encryptedHMACSecret, err := cryptoKey.EncryptText(hmacSecret)
 
 		if err != nil {
 			c.JSON(500, gin.H{"error": "unable to encrypt hmac secret"})

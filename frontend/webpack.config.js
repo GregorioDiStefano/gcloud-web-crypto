@@ -23,6 +23,7 @@ module.exports = {
   },
   devServer: {
     host: '0.0.0.0',
+    disableHostCheck: true,
     historyApiFallback: true,
     hot: true,
     contentBase: './',

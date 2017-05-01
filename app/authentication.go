@@ -99,13 +99,6 @@ func verifyAdminPassword(plainTextPassword []byte) error {
 	return nil
 }
 
-func encrypt(password []byte, pgpkey []byte, salt []byte, iterations int) ([]byte, error) {
-	key := pbkdf2.Key(password, salt, iterations, 32, sha256.New)
-	setupKey := crypto.CryptoKey{Key: key}
-	fileCryptoKey, err := setupKey.EncryptText(pgpkey)
-	return fileCryptoKey, err
-}
-
 func decrypt(password []byte, pgpkey []byte, salt []byte, iterations int) ([]byte, error) {
 	key := pbkdf2.Key(password, salt, iterations, 32, sha256.New)
 	setupKey := crypto.CryptoKey{Key: key}

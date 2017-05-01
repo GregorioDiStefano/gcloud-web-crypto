@@ -6,7 +6,7 @@ import { BootstrapTable, TableHeaderColumn } from 'react-bootstrap-table';
 class FileInfo extends Component {
   constructor(props) {
     super(props)
-    this.setState({ filedata: this.props.fi, hidden: false})
+    this.setState({ filedata: this.props.fi})
 }
 
 removeFile = (e) => {
@@ -23,19 +23,6 @@ hideInfo = () => {
 }
 
 render() {
-  console.log(this.state)
-  var fi = "tst"
-
-  if (this.state && typeof this.state.fs !== 'undefined') {
-    fi = this.state.fs
-  }
-
-  if (this.state && this.state.hidden) {
-    return (
-      null
-    );
-  }
-
   return (
     <div id="fileInfo">
     <form>
