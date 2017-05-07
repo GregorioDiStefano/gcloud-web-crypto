@@ -6,16 +6,17 @@ import (
 )
 
 type File struct {
-	ID           int64 `datastore:"-"`
-	Filename     []byte
-	FilenameHMAC string
-	Folder       string
-	FileType     string
-	FileSize     int64
-	UploadDate   time.Time
-	Description  string
-	Tags         []string
-	MD5          string
+	ID                int64 `datastore:"-"`
+	Filename          []byte
+	FilenameHMAC      string
+	GoogleCloudObject string
+	Folder            string
+	FileType          string
+	FileSize          int64
+	UploadDate        time.Time
+	Description       string
+	Tags              []string
+	MD5               string
 }
 
 type FolderTree struct {

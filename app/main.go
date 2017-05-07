@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	AUTH_ENABLED = true
-	DEV_MODE     = true
+	AuthEnabled = true
 )
 
 func main() {
@@ -29,7 +28,7 @@ func main() {
 	private := r.Group("/auth")
 
 	setupMiddleware(cryptoKey, cloudio)
-	if AUTH_ENABLED {
+	if AuthEnabled {
 		private.Use(jwtMiddleware.MiddlewareFunc())
 	}
 
@@ -118,7 +117,6 @@ func main() {
 	})
 
 	private.DELETE("/file/:uuid", func(c *gin.Context) {
-
 		id, err := strconv.ParseInt(c.Param("uuid"), 10, 64)
 
 		if err != nil {

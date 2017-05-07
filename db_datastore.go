@@ -55,11 +55,11 @@ func (db *datastoreDB) GetFile(id int64) (*File, error) {
 	return &encfile, nil
 }
 
-func (db *datastoreDB) AddFile(b *File) (id int64, err error) {
+func (db *datastoreDB) AddFile(f *File) (id int64, err error) {
 	ctx := context.Background()
 	k := datastore.IncompleteKey("FileStruct", nil)
 	//	k := datastore.IncompleteKey("FileStruct", nil)
-	k, err = db.client.Put(ctx, k, b)
+	k, err = db.client.Put(ctx, k, f)
 	if err != nil {
 		return 0, fmt.Errorf("could not put file: %v", err)
 	}

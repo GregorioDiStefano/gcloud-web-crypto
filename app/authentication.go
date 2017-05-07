@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"time"
 
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
@@ -37,7 +36,6 @@ func setupMiddleware(cryptoKey *crypto.CryptoKey, cloudio *cloudIO) {
 				}
 
 				hmacSecret, err := decrypt([]byte(password), ph.EncryptedHMACSecret, ph.Salt, ph.Iterations)
-				fmt.Println("plaintext hmac: ", hmacSecret)
 
 				if err != nil {
 					return userId, false

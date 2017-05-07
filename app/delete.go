@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"sync"
 
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
@@ -17,16 +16,20 @@ const (
 )
 
 func (cIO *cloudIO) deleteFile(id int64) error {
-	err := gc.FileStructDB.DeleteFile(id)
+	f, err := gc.FileStructDB.GetFile(id)
+
+	if err != nil {
+		return err
+	}
+
+	err = gc.FileStructDB.DeleteFile(id)
 
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	idAsString := strconv.FormatInt(id, 10)
-
-	if err := gc.StorageBucket.Object(idAsString).Delete(ctx); err != nil {
+	if err := gc.StorageBucket.Object(f.GoogleCloudObject).Delete(ctx); err != nil {
 		return fmt.Errorf("unable to delete file: %d", id)
 	} else {
 		fmt.Println("deleted: ", id)

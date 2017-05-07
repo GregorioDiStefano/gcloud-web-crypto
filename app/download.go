@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,9 +25,6 @@ type cloudIO struct {
 }
 
 func (cIO *cloudIO) downloadFile(httpContext *gin.Context, id int64) error {
-	httpContext.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-	httpContext.Writer.Header().Set("Access-Control-Allow-Methods", "GET")
-
 	ef, err := gc.FileStructDB.GetFile(id)
 
 	if err != nil {
@@ -36,8 +32,7 @@ func (cIO *cloudIO) downloadFile(httpContext *gin.Context, id int64) error {
 	}
 
 	ctx := context.Background()
-	idAsString := strconv.FormatInt(id, 10)
-	r, err := cIO.storageBucket.Object(idAsString).NewReader(ctx)
+	r, err := cIO.storageBucket.Object(ef.GoogleCloudObject).NewReader(ctx)
 
 	if err != nil {
 		return err
@@ -70,8 +65,7 @@ func (cIO *cloudIO) downloadFolder(httpContext gin.Context, path string) error {
 
 	for _, file := range files {
 		ctx := context.Background()
-		idAsString := strconv.FormatInt(file.ID, 10)
-		r, err := cIO.storageBucket.Object(idAsString).NewReader(ctx)
+		r, err := cIO.storageBucket.Object(file.GoogleCloudObject).NewReader(ctx)
 
 		if r == nil {
 			fmt.Println(file.ID, " is nil")

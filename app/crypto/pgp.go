@@ -18,7 +18,7 @@ func init() {
 	}
 }
 
-func (c *CryptoKey) EncryptFile(src io.Reader, w io.Writer) (err error) {
+func (c *CryptoKey) EncryptFile(src io.Reader, w io.Writer) (written int64, err error) {
 	password := c.Key
 	cipherText, err := openpgp.SymmetricallyEncrypt(w, password, nil, &packetConfig)
 
@@ -32,7 +32,7 @@ func (c *CryptoKey) EncryptFile(src io.Reader, w io.Writer) (err error) {
 	}
 
 	writer := io.MultiWriter(cipherText)
-	_, err = io.Copy(writer, src)
+	written, err = io.Copy(writer, src)
 
 	if err != nil {
 		return
