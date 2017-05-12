@@ -7,6 +7,7 @@ import (
 
 type File struct {
 	ID                int64 `datastore:"-"`
+	Username          string
 	Filename          []byte
 	FilenameHMAC      string
 	GoogleCloudObject string
@@ -14,6 +15,7 @@ type File struct {
 	FileType          string
 	FileSize          int64
 	UploadDate        time.Time
+	Downloads         int64
 	Description       string
 	Tags              []string
 	MD5               string
@@ -21,6 +23,7 @@ type File struct {
 
 type FolderTree struct {
 	ID           int64 `datastore:"-"`
+	Username     string
 	UploadDate   time.Time
 	ParentKey    int64
 	ParentFolder string
@@ -28,16 +31,23 @@ type FolderTree struct {
 }
 
 type FileDatabase interface {
-	ListFiles(string) ([]File, error)
+	ListFiles(user string, path string) ([]File, error)
 	ListTags() ([]string, error)
 	ListFilesWithTags([]string) ([]File, error)
-	ListFolders(string) ([]FolderTree, int64, error)
+
+	ListFolders(user, path string) ([]FolderTree, int64, error)
+
+	// FolderTree contains a username
 	AddFolder(f *FolderTree) (int64, error)
+
+	// File contains a username
 	AddFile(f *File) (id int64, err error)
-	FilenameHMACExists(string) bool
-	GetFile(id int64) (*File, error)
-	DeleteFile(id int64) error
-	DeleteFolder(id int64) error
+	UpdateFile(f *File, id int64) (err error)
+	FilenameHMACExists(user string, hmac string) bool
+	GetFile(user string, id int64) (*File, error)
+	GetAllFiles(user string) ([]*File, error)
+	DeleteFile(user string, id int64) error
+	DeleteFolder(user string, id int64) error
 	Close()
 }
 

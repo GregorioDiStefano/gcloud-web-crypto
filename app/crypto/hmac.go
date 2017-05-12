@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 )
 
-func (c *CryptoKey) GenerateHMAC(data []byte) string {
+func (c *CryptoData) GenerateHMAC(data []byte) string {
 	sig := hmac.New(sha256.New, c.HMACSecret)
 	sig.Write(data)
 

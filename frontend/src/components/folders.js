@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import request from 'superagent'
 import { BootstrapTable, TableHeaderColumn } from 'react-bootstrap-table'
 import SweetAlert from 'sweetalert-react';
-import FileInfo from './fileinfo'
+import FileInfo from './fileinfo.js'
 import moment from 'moment'
 import Header from './header.js';
 import Search from './search.js';
@@ -17,7 +17,7 @@ class Folder extends Component {
       showDeleteFolder: false,
       showFileInfo: false,
     }
-    this.hideFileInfoHandler = this.hideFileInfoHandler.bind(this)
+    //this.hideFileInfoHandler = this.hideFileInfoHandler.bind(this)
 
     this.currentFolder = "/"
     this.updateFolder("/")
@@ -42,16 +42,8 @@ navigate = (row) => {
   if (row["type"] == "folder") {
     this.currentFolder = row.fullpath
     this.updateFolder(this.currentFolder)
-  } else {
-    this.setState({ fileType: row["filetype"],
-                    fileDescription: row["description"],
-                    fileName: row["name"],
-                    fileSize: row["filesize"],
-                    fileMD5Hash: row["md5"],
-                    fileTags: row["tags"],
-                    fileUploadDate: row["upload_date"]})
-    this.setState({ showFileInfo: true })
   }
+
 }
 
 promptRemoveDialog = (e, deleteType, deleteInfo) => {
@@ -87,6 +79,8 @@ removeFolder = (deleteID) => {
 
 downloadFile = (e, d) => {
   e.stopPropagation()
+  e.preventDefault()
+
   var uuid = d.ID
   request
   .get('/auth/file/' + uuid)
@@ -109,7 +103,7 @@ iconFormatter = (cell, row) => {
     var downloadLink = "/auth/file/" + row.id
     return (
       <div>
-        <i className="glyphicon glyphicon-file" ></i>
+        <i className="glyphicon glyphicon-file" onClick={(evt) => this.displayInformation(evt, row)} ></i>
         <i className="glyphicon glyphicon-remove" onClick={(evt) => this.promptRemoveDialog(evt, "file", row.id)}></i>
         <a className="glyphicon glyphicon-download-alt downloadLink" href={downloadLink}></a>
       </div>
@@ -117,8 +111,15 @@ iconFormatter = (cell, row) => {
   }
 }
 
-displayInformation = (e) => {
-  this.setState({file: "test", fi: "abc", fileid: e.id})
+displayInformation = (e, row) => {
+  this.setState({ fileType: row["filetype"],
+                  fileDescription: row["description"],
+                  fileName: row["name"],
+                  fileSize: row["filesize"],
+                  fileMD5Hash: row["md5"],
+                  fileTags: row["tags"],
+                  fileUploadDate: row["upload_date"]})
+  this.setState({ showFileInfo: true })
 }
 
 fileSizeFormatter = (cell, row) => {
@@ -224,8 +225,8 @@ render() {
         : null }
 
         <BootstrapTable data={folders} striped={false} hover={true} options={options} bordered={ false } condensed>
-          <TableHeaderColumn isKey={true} dataField="type" dataFormat={this.iconFormatter} onClick={this.displayInformation} dataSort width='80'></TableHeaderColumn>
-          <TableHeaderColumn dataField="name">Name</TableHeaderColumn>
+          <TableHeaderColumn isKey={true} dataField="type" dataFormat={this.iconFormatter}  dataSort width='80'></TableHeaderColumn>
+          <TableHeaderColumn dataField="name" >Name</TableHeaderColumn>
           <TableHeaderColumn dataField="filesize" dataFormat={this.fileSizeFormatter} width='100'>Size</TableHeaderColumn>
           <TableHeaderColumn dataField="upload_date" dataFormat={this.normalizeDate} width='150'>Uploaded</TableHeaderColumn>
         </BootstrapTable>

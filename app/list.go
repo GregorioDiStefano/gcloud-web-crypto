@@ -28,12 +28,12 @@ const (
 	typeFolder   = "folder"
 )
 
-func listAllNestedFiles(path string) []gc.File {
+func (user *userData) listAllNestedFiles(path string) []gc.File {
 	var nestedFiles []gc.File
 	path = normalizeFolder(filepath.Clean(path))
-
-	folders, _, _ := gc.FileStructDB.ListFolders(path)
-	files, _ := gc.FileStructDB.ListFiles(path)
+	username := user.userEntry.Username
+	folders, _, _ := gc.FileStructDB.ListFolders(username, path)
+	files, _ := gc.FileStructDB.ListFiles(username, path)
 
 	for _, file := range files {
 		nestedFiles = append(nestedFiles, file)
@@ -45,7 +45,7 @@ func listAllNestedFiles(path string) []gc.File {
 		wg.Add(1)
 		go func(f gc.FolderTree) {
 			defer wg.Done()
-			nestedFiles = append(nestedFiles, listAllNestedFiles(filepath.Join(path, f.Folder))...)
+			nestedFiles = append(nestedFiles, user.listAllNestedFiles(filepath.Join(path, f.Folder))...)
 		}(folder)
 	}
 
@@ -53,9 +53,9 @@ func listAllNestedFiles(path string) []gc.File {
 	return nestedFiles
 }
 
-func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
+func (user *userData) listFileSystem(path string) ([]FileSystemStructure, error) {
 	path = normalizeFolder(filepath.Clean(path))
-	files, err := gc.FileStructDB.ListFiles(path)
+	files, err := gc.FileStructDB.ListFiles(user.userEntry.Username, path)
 
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 
 	for _, file := range files {
 
-		plainTextFilename, err := cio.cryptoKey.DecryptText(file.Filename)
+		plainTextFilename, err := user.cryptoData.DecryptText(file.Filename)
 
 		if err != nil {
 			return nil, err
@@ -86,7 +86,7 @@ func (cio *cloudIO) listFileSystem(path string) ([]FileSystemStructure, error) {
 		fs = append(fs, newFSEntry)
 	}
 
-	folders, _, err := gc.FileStructDB.ListFolders(path)
+	folders, _, err := gc.FileStructDB.ListFolders(user.userEntry.Username, path)
 
 	if err != nil {
 		return nil, err

@@ -14,6 +14,7 @@ type datastoreDB struct {
 
 const (
 	ErrorNoDatabaseEntryFound = "no entry found"
+	ErrorNotRequestingUsers   = "this object does not belong to the requesting user"
 )
 
 var _ FileDatabase = &datastoreDB{}
@@ -38,35 +39,48 @@ func (db *datastoreDB) Close() {
 	// No op.
 }
 
-func (db *datastoreDB) GetFile(id int64) (*File, error) {
+func (db *datastoreDB) GetFile(user string, id int64) (*File, error) {
 	ctx := context.Background()
 	var encfile File
-	fmt.Println("ID = ", id)
 
 	key := datastore.IDKey("FileStruct", id, nil)
-
 	err := db.client.Get(ctx, key, &encfile)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not list files: %v", err)
 	}
 
-	fmt.Println("file: ", encfile)
+	if encfile.Username != user {
+		return nil, fmt.Errorf(ErrorNotRequestingUsers)
+	}
+
 	return &encfile, nil
 }
 
 func (db *datastoreDB) AddFile(f *File) (id int64, err error) {
 	ctx := context.Background()
 	k := datastore.IncompleteKey("FileStruct", nil)
-	//	k := datastore.IncompleteKey("FileStruct", nil)
 	k, err = db.client.Put(ctx, k, f)
+
 	if err != nil {
 		return 0, fmt.Errorf("could not put file: %v", err)
 	}
 	return k.ID, nil
 }
 
-func (db *datastoreDB) ListFiles(path string) ([]File, error) {
+func (db *datastoreDB) UpdateFile(f *File, id int64) (err error) {
+	ctx := context.Background()
+
+	k := datastore.IDKey("FileStruct", id, nil)
+	_, err = db.client.Put(ctx, k, f)
+
+	if err != nil {
+		return fmt.Errorf("could not put file: %v", err)
+	}
+	return nil
+}
+
+func (db *datastoreDB) ListFiles(user, path string) ([]File, error) {
 	ctx := context.Background()
 
 	encfile := make([]File, 0)
@@ -75,6 +89,8 @@ func (db *datastoreDB) ListFiles(path string) ([]File, error) {
 	if path != "" {
 		q = q.Filter("Folder =", path)
 	}
+
+	q = q.Filter("Username = ", user)
 
 	if keys, err := db.client.GetAll(ctx, q, &encfile); err != nil {
 		return nil, fmt.Errorf("could not list files: %v", err)
@@ -130,11 +146,12 @@ func (db *datastoreDB) ListFilesWithTags(tags []string) ([]File, error) {
 	return encfile, nil
 }
 
-func (db *datastoreDB) ListFolders(path string) ([]FolderTree, int64, error) {
+func (db *datastoreDB) ListFolders(user, path string) ([]FolderTree, int64, error) {
 	ctx := context.Background()
 
 	encfile := make([]FolderTree, 0)
 	q := datastore.NewQuery("FolderStruct")
+	q = q.Filter("Username = ", user)
 	var parentFolderKey int64
 
 	if path == "/" {
@@ -160,6 +177,7 @@ func (db *datastoreDB) ListFolders(path string) ([]FolderTree, int64, error) {
 	}
 
 	nq := datastore.NewQuery("FolderStruct").Filter("ParentKey = ", int64(parentFolderKey))
+	nq = nq.Filter("Username = ", user)
 	encfile = make([]FolderTree, 0)
 
 	if keys, err := db.client.GetAll(ctx, nq, &encfile); err != nil {
@@ -183,8 +201,17 @@ func (db *datastoreDB) AddFolder(ft *FolderTree) (int64, error) {
 	return key.ID, err
 }
 
-func (db *datastoreDB) DeleteFile(id int64) error {
+func (db *datastoreDB) DeleteFile(user string, id int64) error {
+	var f File
 	ctx := context.Background()
+	key := datastore.IDKey("FileStruct", id, nil)
+
+	if err := db.client.Get(ctx, key, &f); err != nil {
+		return err
+	} else if f.Username != user {
+		return errors.New(ErrorNotRequestingUsers)
+	}
+
 	err := db.client.Delete(ctx, &datastore.Key{ID: id, Kind: "FileStruct"})
 	if err != nil {
 		return err
@@ -193,10 +220,21 @@ func (db *datastoreDB) DeleteFile(id int64) error {
 	return nil
 }
 
-func (db *datastoreDB) DeleteFolder(key int64) error {
+func (db *datastoreDB) DeleteFolder(user string, id int64) error {
+	var f FolderTree
 	ctx := context.Background()
-	err := db.client.Delete(ctx, &datastore.Key{ID: key, Kind: "FolderStruct"})
+	key := datastore.IDKey("FolderStruct", id, nil)
 
+	if err := db.client.Get(ctx, key, &f); err == nil {
+		if f.Username != user {
+			return errors.New(ErrorNoDatabaseEntryFound)
+		}
+	} else {
+		fmt.Println(err)
+		return nil
+	}
+
+	err := db.client.Delete(ctx, &datastore.Key{ID: id, Kind: "FolderStruct"})
 	if err != nil {
 		fmt.Println("error deletting folder: ", err.Error())
 		return err
@@ -204,10 +242,11 @@ func (db *datastoreDB) DeleteFolder(key int64) error {
 	return nil
 }
 
-func (db *datastoreDB) FilenameHMACExists(searchHMAC string) bool {
+func (db *datastoreDB) FilenameHMACExists(user, searchHMAC string) bool {
 	ctx := context.Background()
 	fmt.Println("looking for:", searchHMAC)
 	q := datastore.NewQuery("FileStruct").Filter("FilenameHMAC = ", searchHMAC)
+	q.Filter("Username = ", user)
 
 	encfile := make([]File, 0)
 	_, err := db.client.GetAll(ctx, q, &encfile)
@@ -216,10 +255,10 @@ func (db *datastoreDB) FilenameHMACExists(searchHMAC string) bool {
 	return err == nil && len(encfile) > 0
 }
 
-func (db *datastoreDB) SetCryptoPasswordHash(ph *PasswordHash) error {
+func (db *datastoreDB) SetUserEntry(userEntry *UserEntry) error {
 	ctx := context.Background()
-	k := datastore.IncompleteKey("PasswordConfig", nil)
-	_, err := db.client.Put(ctx, k, ph)
+	k := datastore.IncompleteKey("UserEntry", nil)
+	_, err := db.client.Put(ctx, k, userEntry)
 
 	if err != nil {
 		return err
@@ -228,42 +267,54 @@ func (db *datastoreDB) SetCryptoPasswordHash(ph *PasswordHash) error {
 	return nil
 }
 
-func (db *datastoreDB) GetCryptoPasswordHash() (*PasswordHash, error) {
+func (db *datastoreDB) UpdateUser(id int64, userEntry *UserEntry) error {
 	ctx := context.Background()
-	q := datastore.NewQuery("PasswordConfig")
-	ph := make([]*PasswordHash, 0)
 
-	_, err := db.client.GetAll(ctx, q, &ph)
+	k := datastore.IDKey("UserEntry", id, nil)
+	_, err := db.client.Put(ctx, k, userEntry)
 
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("could not put file: %v", err)
 	}
-
-	if len(ph) == 0 {
-		return nil, errors.New(ErrorNoDatabaseEntryFound)
-	}
-
-	return ph[0], nil
-}
-
-func (db *datastoreDB) SetUserCreds(uc *UserCredentials) error {
 	return nil
 }
 
-func (db *datastoreDB) GetUserCreds(username string) (*UserCredentials, error) {
+func (db *datastoreDB) GetUserEntry(user string) (*UserEntry, int64, error) {
 	ctx := context.Background()
-	q := datastore.NewQuery("UserConfigDatabase")
-	uc := make([]*UserCredentials, 0)
+	q := datastore.NewQuery("UserEntry").Filter("Username = ", user)
+	u := make([]*UserEntry, 0)
 
-	_, err := db.client.GetAll(ctx, q, &uc)
+	keys, err := db.client.GetAll(ctx, q, &u)
 
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	if len(uc) == 0 {
-		return nil, errors.New(ErrorNoDatabaseEntryFound)
+	if len(u) == 0 {
+		return nil, 0, errors.New(ErrorNoDatabaseEntryFound)
 	}
 
-	return uc[0], nil
+	return u[0], keys[0].ID, nil
+}
+
+func (db *datastoreDB) GetUsers() ([]*UserEntry, error) {
+	ctx := context.Background()
+	q := datastore.NewQuery("UserEntry")
+	users := make([]*UserEntry, 0)
+
+	_, err := db.client.GetAll(ctx, q, &users)
+
+	return users, err
+}
+
+func (db *datastoreDB) GetAllFiles(user string) ([]*File, error) {
+	ctx := context.Background()
+
+	encfile := make([]*File, 0)
+	q := datastore.NewQuery("FileStruct")
+	q = q.Filter("Username =", user)
+
+	_, err := db.client.GetAll(ctx, q, &encfile)
+
+	return encfile, err
 }

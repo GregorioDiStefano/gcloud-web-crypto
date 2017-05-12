@@ -1,4 +1,6 @@
+app/app
 creds.json
 frontend.tar.gz
 frontend/dist/
 */node_modules/
+secrets-env-file

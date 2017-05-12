@@ -1,9 +1,11 @@
 package crypto
 
 import (
+	"encoding/base64"
 	"errors"
 	"io"
 
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
 )
@@ -16,10 +18,13 @@ func init() {
 		DefaultCompressionAlgo: packet.CompressionZLIB,
 		CompressionConfig:      &packet.CompressionConfig{Level: packet.BestCompression},
 	}
+
+	log.SetLevel(log.DebugLevel)
 }
 
-func (c *CryptoKey) EncryptFile(src io.Reader, w io.Writer) (written int64, err error) {
-	password := c.Key
+func (c *CryptoData) EncryptFile(src io.Reader, w io.Writer) (written int64, err error) {
+	password := c.SymmetricKey
+	log.WithFields(log.Fields{"key": base64.StdEncoding.EncodeToString(c.SymmetricKey)}).Debug("encrypting")
 	cipherText, err := openpgp.SymmetricallyEncrypt(w, password, nil, &packetConfig)
 
 	if err != nil {
@@ -40,10 +45,11 @@ func (c *CryptoKey) EncryptFile(src io.Reader, w io.Writer) (written int64, err 
 	return
 }
 
-func (c *CryptoKey) DecryptFile(r io.Reader, df io.Writer) (err error) {
-	password := c.Key
-
+func (c *CryptoData) DecryptFile(r io.Reader, df io.Writer) (err error) {
+	password := c.SymmetricKey
 	failed := false
+
+	log.WithFields(log.Fields{"key": base64.StdEncoding.EncodeToString(c.SymmetricKey)}).Debug("decrypting")
 	prompt := func(keys []openpgp.Key, symmetric bool) ([]byte, error) {
 		// If the given passphrase isn't correct, the function will be called again, forever.
 		if failed {

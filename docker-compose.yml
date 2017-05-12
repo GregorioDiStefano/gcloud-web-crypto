@@ -1,0 +1,15 @@
+version: '2'
+
+services:
+    frontend:
+        image: frontend
+        restart: always
+        ports:
+            - 80:80
+
+    backend:
+        image: backend
+        restart: always
+        env_file: secrets-env-file
+        volumes:
+            - ./app/creds.json:/creds.json

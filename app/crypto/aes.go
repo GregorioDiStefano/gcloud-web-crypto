@@ -4,16 +4,27 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"io"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
 	nounceSize = 12
 )
 
-type CryptoKey struct {
-	Key        []byte
-	HMACSecret []byte
+type CryptoData struct {
+	SymmetricKey []byte
+	HMACSecret   []byte
+
+	Salt       []byte
+	Iterations int
+}
+
+func NewCryptoData(password []byte, hmacSecret []byte, salt []byte, iterations int) *CryptoData {
+	symmetricKey := pbkdf2.Key([]byte(password), salt, iterations, 32, sha256.New)
+	return &CryptoData{SymmetricKey: symmetricKey, HMACSecret: hmacSecret, Salt: salt, Iterations: iterations}
 }
 
 func RandomBytes(length int) ([]byte, error) {
@@ -23,10 +34,9 @@ func RandomBytes(length int) ([]byte, error) {
 	return b, err
 }
 
-func (ac *CryptoKey) EncryptText(str []byte) ([]byte, error) {
+func (cryptoData *CryptoData) EncryptText(str []byte) ([]byte, error) {
 	plaintext := []byte(str)
-
-	block, err := aes.NewCipher(ac.Key)
+	block, err := aes.NewCipher(cryptoData.SymmetricKey)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +58,10 @@ func (ac *CryptoKey) EncryptText(str []byte) ([]byte, error) {
 	return ivCiphertext, nil
 }
 
-func (ac *CryptoKey) DecryptText(str []byte) ([]byte, error) {
+func (cryptoData *CryptoData) DecryptText(str []byte) ([]byte, error) {
 	nonce := str[:12]
 	ciphertext := str[12:]
-
-	block, err := aes.NewCipher(ac.Key)
+	block, err := aes.NewCipher(cryptoData.SymmetricKey)
 	if err != nil {
 		return nil, err
 	}
