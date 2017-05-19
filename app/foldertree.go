@@ -8,7 +8,7 @@ import (
 )
 
 // createDirectoryTree traverses the datastore and creates folders if they don't exist.
-func createDirectoryTree(path string) (int64, error) {
+func (user *userData) createDirectoryTree(path string) (int64, error) {
 	var lastSeenKey int64
 	var lastFolder []string
 
@@ -16,9 +16,10 @@ func createDirectoryTree(path string) (int64, error) {
 		lastFolder = append(lastFolder, pathSegment.Folder)
 		searchFolder := normalizeFolder(strings.Join(lastFolder, "/"))
 
-		if foundExistingFolder, foundExistingKey, _ := gc.FileStructDB.ListFolders(searchFolder); foundExistingFolder != nil {
+		if foundExistingFolder, foundExistingKey, _ := gc.FileStructDB.ListFolders(user.userEntry.Username, searchFolder); foundExistingFolder != nil {
 			lastSeenKey = foundExistingKey
 		} else {
+			pathSegment.Username = user.userEntry.Username
 			pathSegment.ParentKey = lastSeenKey
 			pathSegment.UploadDate = time.Now()
 			newFolderKey, err := gc.FileStructDB.AddFolder(pathSegment)

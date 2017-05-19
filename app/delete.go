@@ -15,14 +15,14 @@ const (
 	errorDeletePathEmpty        = "the requested delete path contains no files"
 )
 
-func (cIO *cloudIO) deleteFile(id int64) error {
-	f, err := gc.FileStructDB.GetFile(id)
+func (user *userData) deleteFile(id int64) error {
+	f, err := gc.FileStructDB.GetFile(user.userEntry.Username, id)
 
 	if err != nil {
 		return err
 	}
 
-	err = gc.FileStructDB.DeleteFile(id)
+	err = gc.FileStructDB.DeleteFile(user.userEntry.Username, id)
 
 	if err != nil {
 		return err
@@ -37,14 +37,14 @@ func (cIO *cloudIO) deleteFile(id int64) error {
 	}
 }
 
-func (cIO *cloudIO) deleteFolder(folderPath string) error {
+func (user *userData) deleteFolder(folderPath string) error {
 	var deleteFileIDs []int64
 	folderPath = filepath.Clean(folderPath)
 
 	if folderPath == "/" {
 		return errors.New(errorDeleteRootNotPermitted)
 	}
-	nestedObjects, err := cIO.listFileSystem(folderPath)
+	nestedObjects, err := user.listFileSystem(folderPath)
 
 	if err != nil {
 		return err
@@ -54,8 +54,8 @@ func (cIO *cloudIO) deleteFolder(folderPath string) error {
 
 	for _, fsObject := range nestedObjects {
 		if fsObject.Type == "folder" {
-			cIO.deleteFolder(fsObject.FullPath)
-			gc.FileStructDB.DeleteFolder(fsObject.ID)
+			user.deleteFolder(fsObject.FullPath)
+			gc.FileStructDB.DeleteFolder(user.userEntry.Username, fsObject.ID)
 		} else {
 			fileID := fsObject.ID
 			deleteFileIDs = append(deleteFileIDs, fileID)
@@ -74,7 +74,7 @@ func (cIO *cloudIO) deleteFolder(folderPath string) error {
 		go func() {
 			for id := range deleteTasks {
 				// ignore errors
-				cIO.deleteFile(id)
+				user.deleteFile(id)
 			}
 		}()
 		wg.Done()

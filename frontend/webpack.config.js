@@ -29,7 +29,7 @@ module.exports = {
     contentBase: './',
     proxy: [
       {
-        context: ['/auth/file/**', '/auth/folder*', '/auth/list/**', '/auth/tags*', '/account/**'],
+        context: ['/auth/**', '/account/**'],
         target: 'http://localhost:3000',
         secure: false
       }

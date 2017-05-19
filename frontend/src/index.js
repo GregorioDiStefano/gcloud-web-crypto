@@ -5,6 +5,7 @@ import Upload from './components/upload'
 import request from 'superagent'
 import Login from './components/login'
 import Signup from './components/signup'
+import User from './components/user'
 import { Router, Route, Redirect, Link, browserHistory } from 'react-router'
 
 class App extends Component {
@@ -32,6 +33,7 @@ class App extends Component {
             <Router path="/login" component={Login} />
             <Router path="/dir" component={Folder} onEnter={this.userIsAuthenticated} />
             <Router path="/logout" onEnter={this.logoutUser} component={Login} />
+            <Router path="/user" component={User} />
             <Route path="upload" component={Upload} onEnter={this.userIsAuthenticated}/>
       </Router>
       );

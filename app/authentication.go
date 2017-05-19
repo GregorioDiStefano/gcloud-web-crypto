@@ -1,53 +1,59 @@
 package main
 
 import (
-	"crypto/sha256"
+	"net/http"
 	"time"
 
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 	"github.com/GregorioDiStefano/gcloud-web-crypto/app/crypto"
 	"github.com/gin-gonic/gin"
-	"gopkg.in/appleboy/gin-jwt.v2"
-
+	cache "github.com/robfig/go-cache"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/crypto/pbkdf2"
+	"gopkg.in/appleboy/gin-jwt.v2"
 )
 
 var jwtMiddleware jwt.GinJWTMiddleware
 
-func setupMiddleware(cryptoKey *crypto.CryptoKey, cloudio *cloudIO) {
-	adminLoggedIn := false
+const (
+	tokenTTL    = time.Hour * 24 * 7
+	notVerified = "user not verified"
+)
+
+func setupMiddleware(memoryStore *cache.Cache) {
 	jwtMiddleware = jwt.GinJWTMiddleware{
-		Realm:      "auth",
-		Key:        []byte(gc.SecretKey),
-		Timeout:    time.Hour * 24 * 7,
-		MaxRefresh: time.Hour * 24,
-		Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
-			if userId == "admin" && verifyAdminPassword([]byte(password)) == nil {
-				ph, err := gc.PasswordDB.GetCryptoPasswordHash()
+		Realm:   "auth",
+		Key:     []byte(gc.SecretKey),
+		Timeout: tokenTTL,
+
+		Authenticator: func(userId string, password string, context *gin.Context) (string, bool) {
+			if verifyUserPassword(userId, []byte(password)) == nil {
+				user, _, err := gc.UserDB.GetUserEntry(userId)
 				if err != nil {
 					return userId, false
 				}
 
-				pgpKey, err := decrypt([]byte(password), ph.EncryptedPGPKey, ph.Salt, ph.Iterations)
+				if user.Enabled == false {
+					context.Set("reason", notVerified)
+					return userId, false
+				}
+
+				c := crypto.NewCryptoData([]byte(password), nil, user.Salt, user.Iterations)
+				pgpKey, err := c.DecryptText(user.EncryptedPGPKey)
 
 				if err != nil {
 					return userId, false
 				}
 
-				hmacSecret, err := decrypt([]byte(password), ph.EncryptedHMACSecret, ph.Salt, ph.Iterations)
+				hmacSecret, err := c.DecryptText(user.EncryptedHMACSecret)
 
 				if err != nil {
 					return userId, false
 				}
 
-				adminLoggedIn = true
-
-				newCryptoKey := crypto.CryptoKey{Key: pgpKey, HMACSecret: hmacSecret}
-				newCloudio := cloudIO{cryptoKey: newCryptoKey, storageBucket: gc.StorageBucket}
-
-				*cryptoKey = newCryptoKey
-				*cloudio = newCloudio
+				// once a user logs in, story credentials in memory, and expire when token expires.
+				userCrypto := crypto.NewCryptoData(pgpKey, hmacSecret, user.Salt, user.Iterations)
+				userCloudIO := userData{cryptoData: *userCrypto, storageBucket: gc.StorageBucket, userEntry: *user}
+				memoryStore.Add(userId, userCloudIO, tokenTTL)
 
 				return userId, true
 
@@ -55,22 +61,23 @@ func setupMiddleware(cryptoKey *crypto.CryptoKey, cloudio *cloudIO) {
 			return userId, false
 		},
 		Authorizator: func(userId string, c *gin.Context) bool {
-			if !adminLoggedIn {
-				return false
+			if user, exists := memoryStore.Get(userId); exists == true {
+				c.Set("user", user.(userData))
 			}
 
-			if userId == "admin" {
-				return true
-			}
-
-			return false
+			return true
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
-			c.JSON(code, gin.H{
-				"code":    code,
-				"message": message,
-			})
+			if reason, exists := c.Get("reason"); exists && reason == notVerified {
+				c.JSON(http.StatusUnauthorized, gin.H{"message": "account is not verified"})
+			} else {
+				c.JSON(code, gin.H{
+					"code":    code,
+					"message": message,
+				})
+			}
 		},
+
 		TokenLookup: "cookie:jwt",
 		TimeFunc:    time.Now,
 	}
@@ -84,8 +91,8 @@ func generatePasswordHash(password []byte) ([]byte, error) {
 	}
 }
 
-func verifyAdminPassword(plainTextPassword []byte) error {
-	ph, err := gc.PasswordDB.GetCryptoPasswordHash()
+func verifyUserPassword(username string, plainTextPassword []byte) error {
+	ph, _, err := gc.UserDB.GetUserEntry(username)
 
 	if err != nil {
 		return err
@@ -95,11 +102,4 @@ func verifyAdminPassword(plainTextPassword []byte) error {
 		return err
 	}
 	return nil
-}
-
-func decrypt(password []byte, pgpkey []byte, salt []byte, iterations int) ([]byte, error) {
-	key := pbkdf2.Key(password, salt, iterations, 32, sha256.New)
-	setupKey := crypto.CryptoKey{Key: key}
-	fileCryptoKey, err := setupKey.DecryptText(pgpkey)
-	return fileCryptoKey, err
 }

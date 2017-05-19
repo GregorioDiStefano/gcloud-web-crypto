@@ -31,13 +31,13 @@ type uploadedFile struct {
 	fileName    string
 }
 
-func (cio *cloudIO) isFileDuplicate(plaintextFolder, plaintextFilename string) bool {
+func (user *userData) isFileDuplicate(plaintextFolder, plaintextFilename string) bool {
 	fullPath := []byte(plaintextFolder + plaintextFilename)
-	hmac := cio.cryptoKey.GenerateHMAC(fullPath)
-	return gc.FileStructDB.FilenameHMACExists(hmac)
+	hmac := user.cryptoData.GenerateHMAC(fullPath)
+	return gc.FileStructDB.FilenameHMACExists(user.userEntry.Username, hmac)
 }
 
-func (cio *cloudIO) doUpload(fileReader io.Reader) (string, int64, string, error) {
+func (user *userData) doUpload(fileReader io.Reader) (string, int64, string, error) {
 	ctx := context.Background()
 	md5Hash := md5.New()
 
@@ -50,7 +50,8 @@ func (cio *cloudIO) doUpload(fileReader io.Reader) (string, int64, string, error
 	r := io.TeeReader(fileReader, md5Hash)
 	w := io.MultiWriter(googleStorageWrite)
 
-	written, err := cio.cryptoKey.EncryptFile(r, w)
+	written, err := user.cryptoData.EncryptFile(r, w)
+
 	if err != nil {
 		return "", 0, "", err
 	}
@@ -62,34 +63,32 @@ func (cio *cloudIO) doUpload(fileReader io.Reader) (string, int64, string, error
 	return filename, written, fmt.Sprintf("%x", md5Hash.Sum(nil)), nil
 }
 
-func (f *uploadedFile) createFileEntry(cio *cloudIO, desc, virtualFolder, title string, tags []string) error {
-	folder := normalizeFolder(filepath.Join(virtualFolder, filepath.Dir(f.fileName)))
-	_, filename := filepath.Split(f.fileName)
+func (user *userData) createFileEntry(file *uploadedFile, desc, virtualFolder, title string, tags []string) error {
+	folder := normalizeFolder(filepath.Join(virtualFolder, filepath.Dir(file.fileName)))
+	_, filename := filepath.Split(file.fileName)
 
-	if encryptedFilename, err := cio.cryptoKey.EncryptText([]byte(filename)); err != nil {
-		fmt.Println(err)
+	if encryptedFilename, err := user.cryptoData.EncryptText([]byte(filename)); err != nil {
 		return err
 	} else {
 		newFile := &gc.File{
+			Username:          user.userEntry.Username,
 			UploadDate:        time.Now(),
-			MD5:               f.md5Hash,
+			MD5:               file.md5Hash,
 			Folder:            folder,
 			Filename:          encryptedFilename,
-			FilenameHMAC:      cio.cryptoKey.GenerateHMAC([]byte(folder + filename)),
-			GoogleCloudObject: f.fileID,
-			FileSize:          f.fileSize,
-			FileType:          f.contentType,
+			FilenameHMAC:      user.cryptoData.GenerateHMAC([]byte(folder + filename)),
+			GoogleCloudObject: file.fileID,
+			FileSize:          file.fileSize,
+			FileType:          file.contentType,
 			Description:       desc,
 			Tags:              tags}
 
-		fmt.Println(folder, filename, cio.isFileDuplicate(folder, filename))
-
-		if !cio.isFileDuplicate(folder, filename) {
+		if !user.isFileDuplicate(folder, filename) {
 			newFileID, err := gc.FileStructDB.AddFile(newFile)
 			if err != nil {
 				return errors.New("error adding file to database: " + err.Error())
 			} else {
-				if _, err := createDirectoryTree(folder); err == nil {
+				if _, err := user.createDirectoryTree(folder); err == nil {
 					fmt.Println(newFileID)
 				}
 			}
@@ -101,7 +100,7 @@ func (f *uploadedFile) createFileEntry(cio *cloudIO, desc, virtualFolder, title 
 	return nil
 }
 
-func (cio *cloudIO) processFileUpload(c *gin.Context) error {
+func (user *userData) processFileUpload(c *gin.Context) error {
 	mr, _ := c.Request.MultipartReader()
 
 	var description, title, virtfolder string
@@ -114,7 +113,7 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 		// only after the entire response is posted do we have access to all form parameters
 		if err == io.EOF {
 			for _, f := range uploadedFiles {
-				if err := f.createFileEntry(cio, description, virtfolder, title, tags); err != nil {
+				if err := user.createFileEntry(&f, description, virtfolder, title, tags); err != nil {
 					return err
 				}
 			}
@@ -148,11 +147,16 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 		}
 
 		if p.FormName() == "file" && len(fileName) > 0 && len(contentType) > 0 {
-			fileid, filesize, md5, err := cio.doUpload(p)
+			fileid, filesize, md5, err := user.doUpload(p)
 			if err != nil {
 				return err
 			} else {
-				uploadedFiles = append(uploadedFiles, uploadedFile{fileID: fileid, contentType: contentType, fileSize: filesize, md5Hash: md5, fileName: fileName})
+				uploadedFiles = append(uploadedFiles,
+					uploadedFile{fileID: fileid,
+						contentType: contentType,
+						fileSize:    filesize,
+						md5Hash:     md5,
+						fileName:    fileName})
 			}
 		}
 
@@ -163,17 +167,6 @@ func (cio *cloudIO) processFileUpload(c *gin.Context) error {
 
 	fmt.Println("Upload files: ", uploadedFiles)
 	return nil
-}
-
-func getParentFolderFromFolder(path string) string {
-	splitDirs := strings.Split(path, "/")
-	parentFolder := strings.Join(splitDirs[0:len(splitDirs)-2], "/")
-
-	if len(parentFolder) == 0 {
-		return "/"
-	} else {
-		return parentFolder + "/"
-	}
 }
 
 func normalizeFolder(path string) string {

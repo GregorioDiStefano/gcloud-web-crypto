@@ -36,9 +36,22 @@ a {
 	font-style: italic;
 }
 
-#headerMenu {
+#header {
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+}
+
+#mainMenu {
 	width: 400px;
   border-bottom: 1px solid;
+	display: flex;
+	justify-content: space-between;
+	margin: 10px 0px 20px 0px;
+	background-color: ghostwhite;
+}
+
+#userMenu {
 	display: flex;
 	justify-content: space-between;
 	margin: 10px 0px 20px 0px;
@@ -48,6 +61,34 @@ a {
 .center {
 	text-align: center !important;
 }
+#enabledUsers {
+	width: 200px;
+}
+
+#enabledUsers input[type=text] {
+    width: 150px;
+}
+
+.flex-container {
+    display: flex;
+		margin-top: 100px;
+    width: 100%;
+    height: 100%;
+		justify-content: center;
+}
+
+#enabled-accounts {
+	margin-top: 20px;
+}
+
+#detailFileStats {
+	margin: 60px;
+}
+
+#detailFileStats dt {
+	margin-top: 12px;
+}
+
 /*a:hover {
   color: #0a813c;
 	text-decoration: none !important;

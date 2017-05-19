@@ -6,7 +6,22 @@ class Signup extends Component {
   constructor(props) {
     super(props)
 
-    this.state = {password1: "", password2: "", disabledSubmit: true, signupError: ""}
+    this.state = {password1: "", password2: "", disabledSubmit: true, signupError: "", username: "admin", mustBeAdmin: false}
+  }
+
+  componentDidMount = () => {
+    request
+      .get('/account/initial')
+      .end(function(error, response) {
+         if (response.statusCode == 404) {
+           this.setState({ "mustBeAdmin": true })
+         }
+      })
+    }
+
+
+  handleUserChange = (event) => {
+    this.setState({ username: event.target.value});
   }
 
   onSubmit = (e) => {
@@ -15,17 +30,17 @@ class Signup extends Component {
     request
       .post('/account/signup')
       .set('Content-Type', 'application/json')
-      .send({ "password": self.state.password1 })
+      .send({ "password": self.state.password1, "username": self.state.username })
       .end(function(error, response){
-        if (response.statusCode != 200) {
+        if (response.statusCode != 201) {
           if ("status" in response.body) {
             self.setState({signupError: response.body["status"]})
           }
         } else {
-            // hack
+            // hack: redirect to login after 800ms since operation takes some time
             setTimeout(function(){
                browserHistory.push(`/login`)
-            }, 250);
+            }, 800);
           }
         })
       }
@@ -42,6 +57,8 @@ class Signup extends Component {
   }
 
   render () {
+    const mustBeAdmin = this.state.mustBeAdmin;
+
     return (
        <form className="form-horizontal"  onSubmit={this.onSubmit}>
          <fieldset>
@@ -49,7 +66,11 @@ class Signup extends Component {
            <div className="form-group">
              <label className="col-md-4 control-label" htmlFor="login">Username</label>
              <div className="col-md-4">
-               <input id="login" name="login" className="form-control input-md" value="admin" disabled readOnly/>
+             { mustBeAdmin ? (
+                 <input id="login" name="username" className="form-control input-md" value={this.state.username} readOnly/>
+             ) : (
+                 <input id="login" name="username" className="form-control input-md" onChange={this.handleUserChange} value={this.state.username} />
+             )}
              </div>
            </div>
            <div className="form-group">
