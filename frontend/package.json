@@ -39,7 +39,10 @@
     "webpack-dashboard": "^0.3.0",
     "webpack-dev-server": "^2.4.1",
     "react-addons-css-transition-group": "^15.4.2",
-    "superagent": "^3.5.2"
+    "superagent": "^3.5.2",
+    "sweetalert-react": "^0.4.10",
+    "react-forms": "beta",
+	"react-progressbar": "^1.4.6"
   },
   "dependencies": {
     "babel-preset-stage-1": "^6.1.18",
