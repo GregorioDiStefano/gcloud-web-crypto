@@ -232,7 +232,11 @@ func mainGinEngine() *gin.Engine {
 
 		// send resource conflict on duplicate file
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"fail": err.Error()})
+			if err.Error() == errorFileIsDuplicate {
+				c.JSON(http.StatusConflict, err.Error())
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"fail": err.Error()})
+			}
 			return
 		}
 
