@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,13 +22,70 @@ type FileSystemStructure struct {
 	FileSize    int64    `json:"filesize,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	MD5         string   `json:"md5,omitempty"`
+	SHA2        string   `json:"sha2,omitempty"`
 }
 
 const (
 	typeFilename = "filename"
 	typeFolder   = "folder"
 )
+
+func (user *userData) listFileSystemByTags(path string, tag []string) ([]FileSystemStructure, error) {
+	fs := []FileSystemStructure{}
+	foldersContainingTaggedFiles := []string{}
+	fmt.Println("tag: ", tag)
+	filesWithTag, err := gc.FileStructDB.ListFilesWithTags(tag)
+
+	for _, f := range filesWithTag {
+		foldersContainingTaggedFiles = append(foldersContainingTaggedFiles, f.Folder)
+
+		if f.Folder == path {
+			plainTextFilename, err := user.cryptoData.DecryptText(f.Filename)
+
+			if err != nil {
+				return nil, err
+			}
+			newFSEntry := FileSystemStructure{
+				ID:          f.ID,
+				Type:        typeFilename,
+				Name:        string(plainTextFilename),
+				FullPath:    filepath.Clean(filepath.Join(f.Folder, string(plainTextFilename))),
+				FileType:    f.FileType,
+				FileSize:    f.FileSize,
+				Description: f.Description,
+				Tags:        f.Tags,
+				UploadDate:  f.UploadDate,
+				SHA2:        f.SHA2,
+			}
+			fs = append(fs, newFSEntry)
+		}
+	}
+
+	folders, _, err := gc.FileStructDB.ListFolders(user.userEntry.Username, path)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, folder := range folders {
+		newFSEntry := FileSystemStructure{
+			ID:         folder.ID,
+			Type:       typeFolder,
+			Name:       normalizeFolder(folder.Folder),
+			UploadDate: folder.UploadDate,
+			FullPath:   normalizeFolder(filepath.Join(path, folder.Folder))}
+
+		for _, folderWithTag := range foldersContainingTaggedFiles {
+			relativePath, err := filepath.Rel(newFSEntry.FullPath, folderWithTag)
+			fmt.Println(newFSEntry.FullPath, folderWithTag, relativePath)
+			if !strings.HasPrefix(relativePath, "..") && err == nil {
+				fs = append(fs, newFSEntry)
+			}
+		}
+	}
+
+	return fs, err
+}
 
 func (user *userData) listAllNestedFiles(path string) []gc.File {
 	var nestedFiles []gc.File
@@ -53,7 +112,7 @@ func (user *userData) listAllNestedFiles(path string) []gc.File {
 	return nestedFiles
 }
 
-func (user *userData) listFileSystem(path string) ([]FileSystemStructure, error) {
+func (user *userData) listFileSystem(path string, tags []string) ([]FileSystemStructure, error) {
 	path = normalizeFolder(filepath.Clean(path))
 	files, err := gc.FileStructDB.ListFiles(user.userEntry.Username, path)
 
@@ -81,8 +140,9 @@ func (user *userData) listFileSystem(path string) ([]FileSystemStructure, error)
 			Description: file.Description,
 			Tags:        file.Tags,
 			UploadDate:  file.UploadDate,
-			MD5:         file.MD5,
+			SHA2:        file.SHA2,
 		}
+
 		fs = append(fs, newFSEntry)
 	}
 

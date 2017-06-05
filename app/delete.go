@@ -44,7 +44,7 @@ func (user *userData) deleteFolder(folderPath string) error {
 	if folderPath == "/" {
 		return errors.New(errorDeleteRootNotPermitted)
 	}
-	nestedObjects, err := user.listFileSystem(folderPath)
+	nestedObjects, err := user.listFileSystem(folderPath, nil)
 
 	if err != nil {
 		return err

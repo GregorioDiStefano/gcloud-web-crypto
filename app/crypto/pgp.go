@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"crypto"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -14,9 +15,12 @@ var packetConfig packet.Config
 
 func init() {
 	packetConfig = packet.Config{
+		DefaultHash:            crypto.SHA256,
 		DefaultCipher:          packet.CipherAES256,
-		DefaultCompressionAlgo: packet.CompressionZLIB,
-		CompressionConfig:      &packet.CompressionConfig{Level: packet.BestCompression},
+		DefaultCompressionAlgo: packet.CompressionZIP,
+		CompressionConfig: &packet.CompressionConfig{
+			Level: packet.BestSpeed,
+		},
 	}
 
 	log.SetLevel(log.DebugLevel)
@@ -36,8 +40,7 @@ func (c *CryptoData) EncryptFile(src io.Reader, w io.Writer) (written int64, err
 		return
 	}
 
-	writer := io.MultiWriter(cipherText)
-	written, err = io.Copy(writer, src)
+	written, err = io.Copy(cipherText, src)
 
 	if err != nil {
 		return
@@ -45,7 +48,7 @@ func (c *CryptoData) EncryptFile(src io.Reader, w io.Writer) (written int64, err
 	return
 }
 
-func (c *CryptoData) DecryptFile(r io.Reader, df io.Writer) (err error) {
+func (c *CryptoData) DecryptFile(r io.Reader, w io.Writer) (err error) {
 	password := c.SymmetricKey
 	failed := false
 
@@ -65,6 +68,6 @@ func (c *CryptoData) DecryptFile(r io.Reader, df io.Writer) (err error) {
 		return
 	}
 
-	io.Copy(df, md.UnverifiedBody)
+	io.Copy(w, md.UnverifiedBody)
 	return
 }

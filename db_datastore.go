@@ -3,6 +3,7 @@ package gscrypto
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"cloud.google.com/go/datastore"
 	"golang.org/x/net/context"
@@ -128,6 +129,8 @@ func (db *datastoreDB) ListTags() ([]string, error) {
 
 func (db *datastoreDB) ListFilesWithTags(tags []string) ([]File, error) {
 	ctx := context.Background()
+
+	fmt.Println("tags: ", tags)
 
 	encfile := make([]File, 0)
 	q := datastore.NewQuery("FileStruct")
@@ -317,4 +320,23 @@ func (db *datastoreDB) GetAllFiles(user string) ([]*File, error) {
 	_, err := db.client.GetAll(ctx, q, &encfile)
 
 	return encfile, err
+}
+
+func (db *datastoreDB) ListAllFolders(user, search string, limit int) ([]string, error) {
+	ctx := context.Background()
+
+	matchingFolders := make([]string, 0)
+	file := make([]*File, 0)
+	q := datastore.NewQuery("FileStruct")
+	q = q.Filter("Username =", user).Project("Folder").Distinct().Limit(limit)
+	_, err := db.client.GetAll(ctx, q, &file)
+
+	for _, folder := range file {
+		if strings.HasPrefix(folder.Folder, search) {
+			matchingFolders = append(matchingFolders, folder.Folder)
+		}
+	}
+
+	fmt.Println("matching folders: ", matchingFolders)
+	return matchingFolders, err
 }
