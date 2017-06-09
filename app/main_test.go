@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,6 +16,7 @@ import (
 
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 	"github.com/GregorioDiStefano/gcloud-web-crypto/app/crypto"
+	"github.com/gin-gonic/gin"
 	"github.com/levigross/grequests"
 	"github.com/stretchr/testify/assert"
 )
@@ -45,6 +49,8 @@ func init() {
 	if !strings.Contains(os.Getenv("GOOGLE_CLOUD_STORAGE_BUCKET"), "testing") || !strings.HasPrefix(os.Getenv("DATASTORE_EMULATOR_HOST"), "localhost") {
 		panic("GOOGLE_CLOUD_STORAGE_BUCKET must contain 'test' substring and DATASTORE_EMULATOR_HOST must be set to local host when testing")
 	}
+
+	gin.SetMode(gin.DebugMode)
 }
 
 func createAdminAndNormalUsers() []*http.Cookie {
@@ -89,7 +95,7 @@ func createAdminAndNormalUsers() []*http.Cookie {
 	return []*http.Cookie{adminCookie[0], normalUserCookie[0]}
 }
 
-func createTestFile(fn string, size int64) string {
+func createTestFile(fn string, size int64) (string, []byte) {
 	cmd := exec.Command("openssl", "rand", fmt.Sprintf("%d", size), "-out", fn)
 	err := cmd.Run()
 
@@ -97,7 +103,99 @@ func createTestFile(fn string, size int64) string {
 		panic(err.Error())
 	}
 
-	return fn
+	h := sha1.New()
+	f, err := os.Open(fn)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err = io.Copy(h, f); err != nil {
+		log.Fatal(err)
+	}
+
+	f.Close()
+	return fn, h.Sum(nil)
+}
+
+func TestDownloadZipFile(t *testing.T) {
+	clearDatastore()
+
+	accounts := createAdminAndNormalUsers()
+	adminCookie := accounts[0]
+
+	type uploads struct {
+		filename string
+		filesize int64
+		path     string
+		hash     []byte
+	}
+
+	uploadFiles := []uploads{
+		uploads{filename: "a", filesize: 1000, path: "/a/", hash: nil},
+		uploads{filename: "c", filesize: 1000, path: "/a/b/c/", hash: nil},
+		uploads{filename: "x", filesize: 2000, path: "/a/", hash: nil},
+	}
+
+	for idx, uploadFile := range uploadFiles {
+		testfile, sha1 := createTestFile(uploadFile.filename, uploadFile.filesize)
+		uploadFiles[idx].hash = sha1
+
+		f, err := grequests.FileUploadFromDisk(testfile)
+		if err != nil {
+			t.Fatalf("failed to upload test file with: " + err.Error())
+		}
+
+		resp, err := grequests.Post(ts.URL+"/auth/file", &grequests.RequestOptions{Cookies: []*http.Cookie{adminCookie},
+			Files: f, Data: map[string]string{"filename": uploadFile.filename, "virtfolder": uploadFile.path}})
+
+		assert.Equal(t, http.StatusCreated, resp.StatusCode, "failed to upload file to backend")
+	}
+
+	resp, err := grequests.Get(ts.URL+"/auth/folder?path=/a/",
+		&grequests.RequestOptions{
+			Cookies: []*http.Cookie{adminCookie}})
+
+	if err != nil {
+		t.Failed()
+	}
+
+	ioutil.WriteFile("/var/tmp/downloaded-zip-file", resp.Bytes(), 0644)
+	out, err := exec.Command("zipinfo", "-1", "/var/tmp/downloaded-zip-file").Output()
+
+	if err != nil {
+		t.Fail()
+	}
+
+	assert.Equal(t, "/a/a\n/a/x\n/a/b/c/c\n", string(out))
+
+	c := exec.Command("unzip", "-o", "downloaded-zip-file")
+	c.Dir = "/var/tmp/"
+	c.Run()
+
+	for _, uploadFile := range uploadFiles {
+		filepath := "/var/tmp" + uploadFile.path + uploadFile.filename
+		fmt.Println(filepath)
+
+		f, err := os.Open(filepath)
+
+		if err != nil {
+			t.Fail()
+		}
+
+		h := sha1.New()
+		read, err := io.Copy(h, f)
+
+		fmt.Println(read)
+		if err != nil {
+			t.Fail()
+		}
+
+		f.Close()
+
+		fmt.Println("hash: ", uploadFile.hash)
+		assert.Equal(t, uploadFile.hash, h.Sum(nil), "file hash unexpected after unzipping")
+	}
 }
 
 func TestUploadDownloadFile(t *testing.T) {
@@ -114,7 +212,7 @@ func TestUploadDownloadFile(t *testing.T) {
 	l := new(login)
 	resp.JSON(&l)
 
-	testfile := createTestFile("testfile1", 2*1024*1024)
+	testfile, _ := createTestFile("testfile1", 2*1024*1024)
 	f, err := grequests.FileUploadFromDisk(testfile)
 	if err != nil {
 		t.Fatalf("failed to upload test file with: " + err.Error())
@@ -165,7 +263,7 @@ func TestFileIsEncrypted(t *testing.T) {
 	l := new(login)
 	resp.JSON(&l)
 
-	testfile := createTestFile("testfile2", 2*1024*1024)
+	testfile, _ := createTestFile("testfile2", 2*1024*1024)
 	f, err := grequests.FileUploadFromDisk(testfile)
 	if err != nil {
 		t.Fatalf("failed to upload test file with: " + err.Error())
@@ -219,7 +317,7 @@ func TestErrorOnDuplicateFiles(t *testing.T) {
 	adminCookie := accounts[0]
 	//userCookie := accounts[1]
 
-	testfile := createTestFile("testfile3", 2*1024*1024)
+	testfile, _ := createTestFile("testfile3", 2*1024*1024)
 	f, err := grequests.FileUploadFromDisk(testfile)
 
 	if err != nil {
@@ -253,7 +351,7 @@ func TestFilesUniqueToAccount(t *testing.T) {
 	userCookie := accounts[1]
 	fmt.Println(adminCookie, userCookie)
 
-	testfile := createTestFile("testfile4", 2*1024*1024)
+	testfile, _ := createTestFile("testfile4", 2*1024*1024)
 	f, err := grequests.FileUploadFromDisk(testfile)
 
 	if err != nil {
@@ -285,7 +383,7 @@ func TestFileListing(t *testing.T) {
 	adminCookie := accounts[0]
 	userCookie := accounts[1]
 
-	testfile := createTestFile("testfile5", 1*1024*1024)
+	testfile, _ := createTestFile("testfile5", 1*1024*1024)
 	f, err := grequests.FileUploadFromDisk(testfile)
 
 	if err != nil {

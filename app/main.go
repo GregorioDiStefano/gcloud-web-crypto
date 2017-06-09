@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,23 +24,44 @@ import (
 )
 
 type userData struct {
-	userEntry     gc.UserEntry
-	cryptoData    crypto.CryptoData
-	storageBucket *storage.BucketHandle
+	userEntry  gc.UserEntry
+	cryptoData crypto.CryptoData
 }
+
+type configData struct {
+	googleCaptchaSecret string
+	googleCaptchaURL    string
+	storageBucket       *storage.BucketHandle
+}
+
+var config configData
 
 func init() {
 	log.SetLevel(log.DebugLevel)
+
+	if gin.IsDebugging() {
+		if !strings.Contains(os.Getenv("GOOGLE_CLOUD_STORAGE_BUCKET"), "testing") || !strings.HasPrefix(os.Getenv("DATASTORE_EMULATOR_HOST"), "localhost") {
+			panic("GOOGLE_CLOUD_STORAGE_BUCKET must contain 'test' substring and DATASTORE_EMULATOR_HOST must be set to local host when testing")
+		} //todo: add storage bucket to config
+	} else {
+		if os.Getenv("GOOGLE_CAPTCHA_SECRET") == "" {
+			panic("Set GOOGLE_CAPTCHA_SECRET env. variable")
+		} else {
+			config.googleCaptchaSecret = os.Getenv("GOOGLE_CAPTCHA_SECRET")
+			config.googleCaptchaURL = "https://www.google.com/recaptcha/api/siteverify"
+		}
+	}
+	config.storageBucket = gc.StorageBucket
 }
 
 func getUserFromContext(c *gin.Context) userData {
 	user, exists := c.Get("user")
 
-	log.WithFields(log.Fields{"user": user.(userData).userEntry.Username}).Debug("got user from context")
-
 	if exists == false {
-		log.WithFields(log.Fields{"user": user.(userData).userEntry.Username}).Debug("user missing from context")
-		c.JSON(http.StatusUnauthorized, "user context is missing")
+		log.Debug("user missing from context")
+		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf(userNotInContext))
+	} else {
+		log.WithFields(log.Fields{"user": user.(userData).userEntry.Username}).Debug("got user from context")
 	}
 
 	return user.(userData)
@@ -54,6 +77,16 @@ func mainGinEngine() *gin.Engine {
 	private.Use(jwtMiddleware.MiddlewareFunc())
 
 	router.POST("/account/login", jwtMiddleware.LoginHandler)
+
+	// verify if valid jwt passed, useful for redirecting to login page
+	private.POST("/account/verify", func(c *gin.Context) {
+		_, exists := c.Get("user")
+		if !exists {
+			c.Status(http.StatusUnauthorized)
+		} else {
+			c.Status(http.StatusOK)
+		}
+	})
 
 	private.GET("/account/users", func(c *gin.Context) {
 		user := getUserFromContext(c)
@@ -128,6 +161,7 @@ func mainGinEngine() *gin.Engine {
 		type signup struct {
 			Password string `form:"password" json:"password"`
 			Username string `form:"username" json:"username"`
+			Captcha  string `form:"google-captcha" json:"google-captcha"`
 			Email    string `form:"email" json:"email"`
 		}
 		var signupRequest signup
@@ -135,6 +169,19 @@ func mainGinEngine() *gin.Engine {
 		if err := c.BindJSON(&signupRequest); err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"status": "unauthorized"})
 			return
+		}
+
+		if !gin.IsDebugging() {
+			if accepted, err := verifyGoogleCaptcha(signupRequest.Captcha); err != nil {
+				log.WithField("error", err.Error()).Warn("failed to verify captcha")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			} else if !accepted {
+				c.JSON(http.StatusUnauthorized, gin.H{"status": "failed to verify captcha"})
+				return
+			}
+		} else {
+			log.Warn("not verifying captcha since we are running in debug mode")
 		}
 
 		// if `admin` user doesn't exit, it must be created before creating non-admin users.
@@ -153,12 +200,12 @@ func mainGinEngine() *gin.Engine {
 
 		password := signupRequest.Password
 
-		if len(password) < 8 || !strings.ContainsAny(password, "!@#$%^&*()123456789") {
+		if len(password) < 8 || !strings.ContainsAny(password, "@#$%!?*0987654321") {
 			c.JSON(http.StatusUnauthorized, gin.H{"status": "the password you picked isn't secure enough."})
 			return
 		}
 
-		iterations := 10000
+		iterations := 500000
 		salt := make([]byte, 32)
 		rand.Read(salt)
 
@@ -295,31 +342,30 @@ func mainGinEngine() *gin.Engine {
 	private.GET("/list/fs", func(c *gin.Context) {
 		user := getUserFromContext(c)
 		path := c.Query("path")
-		tags := c.Query("tags")
+		tags := c.QueryArray("tags")
 
 		if len(path) == 0 && len(tags) == 0 {
 			c.JSON(http.StatusInternalServerError, fmt.Errorf("path/tag is missing"))
 			return
-		} else if len(path) > 0 && len(tags) > 0 {
-			c.JSON(http.StatusInternalServerError, fmt.Errorf("path and tags included, only use one paramter"))
-			return
 		}
 
+		fmt.Println("tagas: ", tags)
 		if len(tags) > 0 {
 			trimmedTags := []string{}
-			for _, tag := range strings.Split(tags, ",") {
+			for _, tag := range tags {
 				trimmedTags = append(trimmedTags, strings.TrimSpace(tag))
 			}
 
-			/*		if fs, err := listFilesWithTags(trimmedTags); err != nil {
-						c.JSON(http.StatusInternalServerError, err)
-					} else {
-						c.JSON(http.StatusOK, fs)
-					}
-			*/
+			fmt.Println("trimmed tags: ", trimmedTags)
+			if fs, err := user.listFileSystemByTags(path, trimmedTags); err != nil {
+				c.JSON(http.StatusInternalServerError, err)
+			} else {
+				c.JSON(http.StatusOK, fs)
+			}
+			return
 		}
 
-		if fs, err := user.listFileSystem(path); err != nil {
+		if fs, err := user.listFileSystem(path, nil); err != nil {
 			c.JSON(http.StatusInternalServerError, err)
 		} else {
 			c.IndentedJSON(http.StatusOK, fs)
@@ -335,6 +381,27 @@ func mainGinEngine() *gin.Engine {
 			c.JSON(http.StatusInternalServerError, err)
 			return
 		}
+	})
+
+	private.GET("/folder/search/", func(c *gin.Context) {
+		user := getUserFromContext(c)
+		searchPath := c.Query("path")
+
+		if len(searchPath) < 1 {
+			c.JSON(http.StatusForbidden, "search must be 2 character or more")
+			return
+		}
+
+		folders, err := gc.FileStructDB.ListAllFolders(user.userEntry.Username, searchPath, 20)
+		sort.Strings(folders)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, folders)
+		return
 	})
 
 	private.GET("/file/:key", func(c *gin.Context) {

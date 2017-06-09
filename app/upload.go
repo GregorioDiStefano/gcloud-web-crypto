@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +14,6 @@ import (
 
 	"cloud.google.com/go/storage"
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
-	//"github.com/davecgh/go-spew/spew"
 	"github.com/gin-gonic/gin"
 	"github.com/satori/go.uuid"
 )
@@ -26,7 +25,7 @@ const (
 type uploadedFile struct {
 	fileID      string
 	contentType string
-	md5Hash     string
+	sha2        string
 	fileSize    int64
 	fileName    string
 }
@@ -37,19 +36,21 @@ func (user *userData) isFileDuplicate(plaintextFolder, plaintextFilename string)
 	return gc.FileStructDB.FilenameHMACExists(user.userEntry.Username, hmac)
 }
 
-func (user *userData) doUpload(fileReader io.Reader) (string, int64, string, error) {
+func (user *userData) doUpload(fileReader io.Reader, storageClass string) (string, int64, string, error) {
 	ctx := context.Background()
-	md5Hash := md5.New()
+	sha256hash := sha256.New()
 
 	filename := uuid.NewV4().String()
 	googleStorageWrite := gc.StorageBucket.Object(filename).NewWriter(ctx)
-	googleStorageWrite.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
+	googleStorageWrite.ACL = []storage.ACLRule{{Entity: storage.AllAuthenticatedUsers, Role: storage.RoleReader}}
 	googleStorageWrite.ContentType = "octet/stream"
 	googleStorageWrite.CacheControl = "public, max-age=86400"
+	googleStorageWrite.StorageClass = storageClass
 
-	r := io.TeeReader(fileReader, md5Hash)
+	r := io.TeeReader(fileReader, sha256hash)
 	w := io.MultiWriter(googleStorageWrite)
 
+	//	compressedRead := io.TeeReader(r, zstd.NewWriterLevel(w, zstd.BestCompression))
 	written, err := user.cryptoData.EncryptFile(r, w)
 
 	if err != nil {
@@ -60,7 +61,7 @@ func (user *userData) doUpload(fileReader io.Reader) (string, int64, string, err
 		return "", 0, "", err
 	}
 
-	return filename, written, fmt.Sprintf("%x", md5Hash.Sum(nil)), nil
+	return filename, written, fmt.Sprintf("%x", sha256hash.Sum(nil)), nil
 }
 
 func (user *userData) createFileEntry(file *uploadedFile, desc, virtualFolder, title string, tags []string) error {
@@ -73,7 +74,7 @@ func (user *userData) createFileEntry(file *uploadedFile, desc, virtualFolder, t
 		newFile := &gc.File{
 			Username:          user.userEntry.Username,
 			UploadDate:        time.Now(),
-			MD5:               file.md5Hash,
+			SHA2:              file.sha2,
 			Folder:            folder,
 			Filename:          encryptedFilename,
 			FilenameHMAC:      user.cryptoData.GenerateHMAC([]byte(folder + filename)),
@@ -103,7 +104,7 @@ func (user *userData) createFileEntry(file *uploadedFile, desc, virtualFolder, t
 func (user *userData) processFileUpload(c *gin.Context) error {
 	mr, _ := c.Request.MultipartReader()
 
-	var description, title, virtfolder string
+	var description, title, virtfolder, storageClass string
 	var tags []string
 	var uploadedFiles []uploadedFile
 
@@ -128,12 +129,20 @@ func (user *userData) processFileUpload(c *gin.Context) error {
 		contentType := p.Header.Get("Content-Type")
 
 		switch p.FormName() {
+
 		case "description":
 			tmp, _ := ioutil.ReadAll(p)
 			description = string(tmp)
+
 		case "virtfolder":
 			tmp, _ := ioutil.ReadAll(p)
 			virtfolder = string(tmp)
+
+		case "storage_class":
+			//TODO: validate input maybe?
+			tmp, _ := ioutil.ReadAll(p)
+			storageClass = strings.ToUpper(string(tmp))
+
 		case "tags":
 			tmp, _ := ioutil.ReadAll(p)
 			unprocessedTags := string(tmp)
@@ -147,7 +156,7 @@ func (user *userData) processFileUpload(c *gin.Context) error {
 		}
 
 		if p.FormName() == "file" && len(fileName) > 0 && len(contentType) > 0 {
-			fileid, filesize, md5, err := user.doUpload(p)
+			fileid, filesize, sha2, err := user.doUpload(p, storageClass)
 			if err != nil {
 				return err
 			} else {
@@ -155,7 +164,7 @@ func (user *userData) processFileUpload(c *gin.Context) error {
 					uploadedFile{fileID: fileid,
 						contentType: contentType,
 						fileSize:    filesize,
-						md5Hash:     md5,
+						sha2:        sha2,
 						fileName:    fileName})
 			}
 		}

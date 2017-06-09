@@ -28,7 +28,7 @@ func (user *userData) downloadFile(httpContext *gin.Context, id int64) error {
 	go gc.FileStructDB.UpdateFile(ef, id)
 
 	ctx := context.Background()
-	r, err := user.storageBucket.Object(ef.GoogleCloudObject).NewReader(ctx)
+	r, err := config.storageBucket.Object(ef.GoogleCloudObject).NewReader(ctx)
 
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func (user *userData) downloadFolder(httpContext gin.Context, path string) error
 
 	for _, file := range files {
 		ctx := context.Background()
-		r, err := user.storageBucket.Object(file.GoogleCloudObject).NewReader(ctx)
+		r, err := config.storageBucket.Object(file.GoogleCloudObject).NewReader(ctx)
 
 		if r == nil {
 			fmt.Println(file.ID, " is nil")

@@ -18,7 +18,7 @@ type File struct {
 	Downloads         int64
 	Description       string
 	Tags              []string
-	MD5               string
+	SHA2              string
 }
 
 type FolderTree struct {
@@ -36,7 +36,7 @@ type FileDatabase interface {
 	ListFilesWithTags([]string) ([]File, error)
 
 	ListFolders(user, path string) ([]FolderTree, int64, error)
-
+	ListAllFolders(user, path string, limit int) ([]string, error)
 	// FolderTree contains a username
 	AddFolder(f *FolderTree) (int64, error)
 
