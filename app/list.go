@@ -33,7 +33,6 @@ const (
 func (user *userData) listFileSystemByTags(path string, tag []string) ([]FileSystemStructure, error) {
 	fs := []FileSystemStructure{}
 	foldersContainingTaggedFiles := []string{}
-	fmt.Println("tag: ", tag)
 	filesWithTag, err := gc.FileStructDB.ListFilesWithTags(tag)
 
 	for _, f := range filesWithTag {
@@ -67,22 +66,38 @@ func (user *userData) listFileSystemByTags(path string, tag []string) ([]FileSys
 		return nil, err
 	}
 
+
+	var addedFolders []string
 	for _, folder := range folders {
 		newFSEntry := FileSystemStructure{
 			ID:         folder.ID,
 			Type:       typeFolder,
 			Name:       normalizeFolder(folder.Folder),
 			UploadDate: folder.UploadDate,
-			FullPath:   normalizeFolder(filepath.Join(path, folder.Folder))}
+			FullPath:   normalizeFolder(filepath.Join(path, folder.Folder)),
+		}
 
 		for _, folderWithTag := range foldersContainingTaggedFiles {
 			relativePath, err := filepath.Rel(newFSEntry.FullPath, folderWithTag)
 			fmt.Println(newFSEntry.FullPath, folderWithTag, relativePath)
 			if !strings.HasPrefix(relativePath, "..") && err == nil {
-				fs = append(fs, newFSEntry)
+				folderAlreadyAdded := false
+				for _, e := range addedFolders {
+					if e == newFSEntry.FullPath {
+						folderAlreadyAdded	= true
+						break
+					}
+				}
+				if !folderAlreadyAdded {
+					fs = append(fs, newFSEntry)
+					addedFolders = append(addedFolders, newFSEntry.FullPath)
+				}
+
 			}
 		}
 	}
+
+	fmt.Println(fs)
 
 	return fs, err
 }

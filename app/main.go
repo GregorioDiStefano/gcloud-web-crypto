@@ -41,7 +41,7 @@ func init() {
 
 	if gin.IsDebugging() {
 		if !strings.Contains(os.Getenv("GOOGLE_CLOUD_STORAGE_BUCKET"), "testing") || !strings.HasPrefix(os.Getenv("DATASTORE_EMULATOR_HOST"), "localhost") {
-			panic("GOOGLE_CLOUD_STORAGE_BUCKET must contain 'test' substring and DATASTORE_EMULATOR_HOST must be set to local host when testing")
+			panic("GOOGLE_CLOUD_STORAGE_BUCKET must contain 'testing' substring and DATASTORE_EMULATOR_HOST must be set to localhost when testing")
 		} //todo: add storage bucket to config
 	} else {
 		if os.Getenv("GOOGLE_CAPTCHA_SECRET") == "" {
@@ -161,7 +161,6 @@ func mainGinEngine() *gin.Engine {
 		type signup struct {
 			Password string `form:"password" json:"password"`
 			Username string `form:"username" json:"username"`
-			Captcha  string `form:"google-captcha" json:"google-captcha"`
 			Email    string `form:"email" json:"email"`
 		}
 		var signupRequest signup
@@ -172,11 +171,12 @@ func mainGinEngine() *gin.Engine {
 		}
 
 		if !gin.IsDebugging() {
-			if accepted, err := verifyGoogleCaptcha(signupRequest.Captcha); err != nil {
+			if accepted, err := verifyGoogleCaptcha(c.Request.Header.Get("google-captcha")); err != nil {
 				log.WithField("error", err.Error()).Warn("failed to verify captcha")
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if !accepted {
+				log.Debug("failed to verify captcha")
 				c.JSON(http.StatusUnauthorized, gin.H{"status": "failed to verify captcha"})
 				return
 			}
@@ -205,7 +205,7 @@ func mainGinEngine() *gin.Engine {
 			return
 		}
 
-		iterations := 500000
+		iterations := 50000
 		salt := make([]byte, 32)
 		rand.Read(salt)
 

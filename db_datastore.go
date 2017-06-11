@@ -130,14 +130,11 @@ func (db *datastoreDB) ListTags() ([]string, error) {
 func (db *datastoreDB) ListFilesWithTags(tags []string) ([]File, error) {
 	ctx := context.Background()
 
-	fmt.Println("tags: ", tags)
-
 	encfile := make([]File, 0)
 	q := datastore.NewQuery("FileStruct")
 
 	for _, tag := range tags {
-		fmt.Println("searching for files with tag: ", tag)
-		q = q.Filter("Tags =", tag)
+		q = q.Filter("Tags =", strings.ToLower(tag))
 	}
 
 	_, err := db.client.GetAll(ctx, q, &encfile)
