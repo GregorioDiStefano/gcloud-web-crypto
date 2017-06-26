@@ -14,7 +14,7 @@ type datastoreDB struct {
 }
 
 const (
-	ErrorNoDatabaseEntryFound = "no entry found"
+	ErrorNoDatabaseEntryFound = "no entry/file found"
 	ErrorNotRequestingUsers   = "this object does not belong to the requesting user"
 )
 
@@ -230,8 +230,7 @@ func (db *datastoreDB) DeleteFolder(user string, id int64) error {
 			return errors.New(ErrorNoDatabaseEntryFound)
 		}
 	} else {
-		fmt.Println(err)
-		return nil
+		return err
 	}
 
 	err := db.client.Delete(ctx, &datastore.Key{ID: id, Kind: "FolderStruct"})

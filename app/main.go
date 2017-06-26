@@ -34,6 +34,11 @@ type configData struct {
 	storageBucket       *storage.BucketHandle
 }
 
+const (
+	errWeakUsername = "please pick a username with more characters"
+	errWeakPassword = "please pick a more secure password"
+)
+
 var config configData
 
 func init() {
@@ -54,12 +59,17 @@ func init() {
 	config.storageBucket = gc.StorageBucket
 }
 
+// When a user successfully logs in, or makes a request with a valid JWT token,
+// the "user" context is added to the request: see the authentication code
+// for more details.
 func getUserFromContext(c *gin.Context) userData {
 	user, exists := c.Get("user")
 
 	if exists == false {
 		log.Debug("user missing from context")
 		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf(userNotInContext))
+		return userData{}
+
 	} else {
 		log.WithFields(log.Fields{"user": user.(userData).userEntry.Username}).Debug("got user from context")
 	}
@@ -68,6 +78,7 @@ func getUserFromContext(c *gin.Context) userData {
 }
 
 func mainGinEngine() *gin.Engine {
+	// this memory store is used for storing logged in user information
 	memoryStore := cache.New(tokenTTL, time.Minute*5)
 
 	router := gin.Default()
@@ -84,7 +95,7 @@ func mainGinEngine() *gin.Engine {
 		if !exists {
 			c.Status(http.StatusUnauthorized)
 		} else {
-			c.Status(http.StatusOK)
+			c.Status(http.StatusNoContent)
 		}
 	})
 
@@ -161,8 +172,8 @@ func mainGinEngine() *gin.Engine {
 		type signup struct {
 			Password string `form:"password" json:"password"`
 			Username string `form:"username" json:"username"`
-			Email    string `form:"email" json:"email"`
 		}
+
 		var signupRequest signup
 
 		if err := c.BindJSON(&signupRequest); err != nil {
@@ -199,9 +210,15 @@ func mainGinEngine() *gin.Engine {
 		}
 
 		password := signupRequest.Password
+		username := signupRequest.Username
 
 		if len(password) < 8 || !strings.ContainsAny(password, "@#$%!?*0987654321") {
-			c.JSON(http.StatusUnauthorized, gin.H{"status": "the password you picked isn't secure enough."})
+			c.JSON(http.StatusUnauthorized, gin.H{"status": errWeakPassword})
+			return
+		}
+
+		if len(username) < 4 || strings.Contains(username, " ") {
+			c.JSON(http.StatusUnauthorized, gin.H{"status": errWeakUsername})
 			return
 		}
 
@@ -250,7 +267,6 @@ func mainGinEngine() *gin.Engine {
 		userEntry := &gc.UserEntry{
 			Username: signupRequest.Username,
 			Admin:    signupRequest.Username == "admin",
-			Email:    signupRequest.Email,
 
 			// by default, all account are disabled unless the user is an admin
 			Enabled:             signupRequest.Username == "admin",
@@ -308,7 +324,10 @@ func mainGinEngine() *gin.Engine {
 			default:
 				c.JSON(http.StatusInternalServerError, err.Error())
 			}
+			return
 		}
+
+		c.Status(http.StatusNoContent)
 	})
 
 	private.DELETE("/folder", func(c *gin.Context) {
@@ -325,7 +344,9 @@ func mainGinEngine() *gin.Engine {
 
 		if err != nil {
 			c.JSON(http.StatusForbidden, err.Error())
+			return
 		}
+		c.Status(http.StatusNoContent)
 	})
 
 	private.GET("/list/tags/", func(c *gin.Context) {
@@ -349,14 +370,12 @@ func mainGinEngine() *gin.Engine {
 			return
 		}
 
-		fmt.Println("tagas: ", tags)
 		if len(tags) > 0 {
 			trimmedTags := []string{}
 			for _, tag := range tags {
 				trimmedTags = append(trimmedTags, strings.TrimSpace(tag))
 			}
 
-			fmt.Println("trimmed tags: ", trimmedTags)
 			if fs, err := user.listFileSystemByTags(path, trimmedTags); err != nil {
 				c.JSON(http.StatusInternalServerError, err)
 			} else {
@@ -415,7 +434,7 @@ func mainGinEngine() *gin.Engine {
 		}
 
 		if err := user.downloadFile(c, id); err != nil {
-			c.JSON(http.StatusInternalServerError, err.Error())
+			c.JSON(http.StatusNotFound, err)
 			return
 		}
 	})

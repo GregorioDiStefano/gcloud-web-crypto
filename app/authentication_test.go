@@ -1,12 +1,16 @@
 package main
 
 import (
-	"github.com/levigross/grequests"
-	"github.com/stretchr/testify/assert"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/levigross/grequests"
+	"github.com/stretchr/testify/assert"
 )
 
 var ts *httptest.Server
@@ -92,21 +96,26 @@ func TestNonExistingAccount(t *testing.T) {
 }
 
 func TestDuplicateAccount(t *testing.T) {
-	signupDetails := map[string]string{
-		"username": "admin",
-		"password": "b033377c682a41ccbe874578339f1adf",
+	type testCase struct {
+		u user
+	}
+
+	tests := []testCase{
+		testCase{adminLoginDetails},
+		testCase{normalUserLoginDetails},
 	}
 
 	clearDatastore()
-	resp, err := grequests.Post(ts.URL+"/account/signup", &grequests.RequestOptions{JSON: signupDetails})
-	assert.Nil(t, err)
-	assert.Equal(t, http.StatusCreated, resp.StatusCode, "didn't login successfully"+resp.String())
 
-	resp, err = grequests.Post(ts.URL+"/account/signup", &grequests.RequestOptions{JSON: signupDetails})
-	assert.Nil(t, err)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode, "didn't login successfully")
+	for _, test := range tests {
+		resp := createUser(test.u)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode, "didn't login successfully"+resp.String())
+		resp = createUser(test.u)
+		assert.Equal(t, http.StatusConflict, resp.StatusCode, "didn't login successfully")
+	}
 }
 
+//TODO: cleanup this mess
 func TestNonAdminAccount(t *testing.T) {
 
 	signupDetails := map[string]string{
@@ -128,8 +137,8 @@ func TestNonAdminAccount(t *testing.T) {
 
 	// get admin token
 	resp, err = grequests.Post(ts.URL+"/account/login", &grequests.RequestOptions{JSON: adminSignupDetails})
-	l := new(login)
-	resp.JSON(&l)
+	adminLogin := new(login)
+	resp.JSON(&adminLogin)
 
 	// create an account
 	resp, err = grequests.Post(ts.URL+"/account/signup", &grequests.RequestOptions{JSON: signupDetails})
@@ -146,7 +155,7 @@ func TestNonAdminAccount(t *testing.T) {
 		Cookies: []*http.Cookie{
 			{
 				Name:     "jwt",
-				Value:    l.Token,
+				Value:    adminLogin.Token,
 				HttpOnly: true,
 				Secure:   false,
 			}}})
@@ -156,6 +165,82 @@ func TestNonAdminAccount(t *testing.T) {
 
 	// finally, login to non-admin account
 	resp, err = grequests.Post(ts.URL+"/account/login", &grequests.RequestOptions{JSON: signupDetails})
-	resp.JSON(&l)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Nil(t, err)
+
+	// disable user
+	disableUser(signupDetails, http.Cookie{
+		Name:     "jwt",
+		Value:    adminLogin.Token,
+		HttpOnly: true,
+		Secure:   false,
+	})
+
+	// finally, login to non-admin account
+	resp, err = grequests.Post(ts.URL+"/account/login", &grequests.RequestOptions{JSON: signupDetails})
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestVerifyCaptcha(t *testing.T) {
+	type googleResponse struct {
+		Success    bool
+		ErrorCodes []string `json:"error-codes"`
+	}
+
+	captchaRouter := gin.Default()
+
+	captchaRouter.POST("/fake_captcha_acceptor", func(c *gin.Context) {
+		c.JSON(http.StatusOK, googleResponse{true, nil})
+	})
+
+	captchaRouter.POST("/fake_captcha_denier", func(c *gin.Context) {
+		c.JSON(http.StatusOK, googleResponse{false, nil})
+	})
+
+	captchaServer := httptest.NewServer(captchaRouter)
+	config.googleCaptchaURL = captchaServer.URL + "/fake_captcha_acceptor"
+
+	fmt.Println(verifyGoogleCaptcha("abc"))
+
+	config.googleCaptchaURL = captchaServer.URL + "/fake_captcha_denier"
+
+	fmt.Println(verifyGoogleCaptcha("abc"))
+}
+
+func TestPasswords(t *testing.T) {
+	clearDatastore()
+	createAdmin()
+
+	type testCase struct {
+		u             user
+		validUsername bool
+		validPassword bool
+	}
+
+	tests := []testCase{
+		{user{"username": "greg", "password": "greg"}, true, false},
+		{user{"username": "greg0", "password": ""}, true, false},
+		{user{"username": "greg0", "password": "               "}, true, false},
+		{user{"username": "greg1", "password": "abcd12345!"}, true, true},
+		{user{"username": "greg2", "password": strings.Repeat("abcd12345", 100)}, true, true},
+		{user{"username": " ", "password": strings.Repeat("abcd12345", 100)}, false, true},
+		{user{"username": "", "password": strings.Repeat("abcd12345", 100)}, false, true},
+		{user{"username": " greg", "password": strings.Repeat("abcd12345", 100)}, false, true},
+	}
+
+	for _, test := range tests {
+		r := createUser(test.u)
+
+		if !test.validUsername {
+			assert.JSONEq(t, fmt.Sprintf("{\"status\":\""+errWeakUsername+"\"}"), r.String())
+			assert.Equal(t, http.StatusUnauthorized, r.StatusCode)
+		} else if !test.validPassword {
+			assert.JSONEq(t, fmt.Sprintf("{\"status\":\""+errWeakPassword+"\"}"), r.String())
+			assert.Equal(t, http.StatusUnauthorized, r.StatusCode)
+		} else {
+			assert.Equal(t, http.StatusCreated, r.StatusCode)
+		}
+
+	}
 }

@@ -66,7 +66,6 @@ func (user *userData) listFileSystemByTags(path string, tag []string) ([]FileSys
 		return nil, err
 	}
 
-
 	var addedFolders []string
 	for _, folder := range folders {
 		newFSEntry := FileSystemStructure{

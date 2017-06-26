@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import cmd2, sys
 import json
 import requests
@@ -11,13 +12,16 @@ import os
 import shlex
 import subprocess
 import optparse
+import mimetypes
+
 
 class FileShell(cmd2.Cmd):
     file = None
-    host = "http://localhost:3000"
+    host = "http://localhost"
     intro = 'Welcome to the gscrypto shell.  Type help or ? to list commands.\n'
     prompt = '>> '
     cookie = None
+    mimetypes.init()
 
     def __init__(self):
         cmd2.Cmd.__init__(self)
@@ -56,7 +60,7 @@ class FileShell(cmd2.Cmd):
     def do_upload(self, arg, opts):
         filesToUpload = []
         uploadPath, virtualfolder, tags = shlex.split(arg)
-
+        ranSuccessfully = False
         def read_callback(monitor):
             bar.update(monitor.bytes_read)
 
@@ -68,18 +72,20 @@ class FileShell(cmd2.Cmd):
             filesToUpload.append(uploadPath)
 
         for f in filesToUpload:
-            if opts.hevc:
+            if opts.hevc and "video" in mimetypes.guess_type(f)[0]:
                 extloc = f.rfind(".")
                 if extloc < 0:
                     extloc = f + ".hevc.mp4"
                 else:
                     output = f[:extloc] + ".hevc.mp4"
-                ret = subprocess.call(["ffmpeg", "-v", "quiet", "-stats", "-y", "-i", f, "-c:v", "libx265", "-preset", "veryfast", "-an", "-x265-params", "crf=21:log-level=0", output])
+                ret = subprocess.call(["ffmpeg", "-v", "quiet", "-stats", "-y", "-i", f, "-c:v", "libx265", "-preset", "medium", "-an", "-x265-params", "log-level=0", output])
                 f = output
 
                 if ret != 0:
                     print("failed to encode to HEVC")
                     SystemExit(1)
+                else:
+                    ranSuccessfully = True
 
             payload = {'file': (f, open(f, 'rb'), "text/plain"), "virtfolder": virtualfolder, "tags": tags}
             filesAsMultipart = MultipartEncoder(fields=payload)
@@ -94,10 +100,12 @@ class FileShell(cmd2.Cmd):
 
             if response.status_code != 201:
                 print("failed: ", response.json())
-            elif opts.hevc:
+            elif opts.hevc and ranSuccessfully:
                 os.remove(f)
 
     def precmd(self, line):
+        if self.cookie is None:
+            raise Exception("Please login with 'login <username> <password>' first")
         return line
 
     def close(self):

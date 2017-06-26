@@ -30,7 +30,7 @@ func TestDeleteFolder(t *testing.T) {
 	clearDatastore()
 
 	createAdmin()
-	adminCookie := loginIn(adminLoginDetails)
+	adminCookie := loginUser(adminLoginDetails)
 
 	testCases := []struct {
 		uploads        []simpleFile
@@ -140,7 +140,7 @@ func TestDeleteFiles(t *testing.T) {
 	clearDatastore()
 	createAdmin()
 
-	adminCookie := loginIn(adminLoginDetails)
+	adminCookie := loginUser(adminLoginDetails)
 
 	testCases := []struct {
 		uploads        []simpleFile

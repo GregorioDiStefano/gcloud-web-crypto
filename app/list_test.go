@@ -14,8 +14,8 @@ import (
 func TestListing(t *testing.T) {
 	clearDatastore()
 
-	users := createAdminAndNormalUsers()
-	admin := users[0]
+	createAdmin()
+	admin := loginUser(adminLoginDetails)
 
 	type uploads struct {
 		filename string

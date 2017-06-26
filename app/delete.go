@@ -68,13 +68,16 @@ func (user *userData) deleteFolder(folderPath string) error {
 		return err
 	}
 
+	var deleteError error
 	deleteTasks := make(chan int64, 64)
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			for id := range deleteTasks {
 				// ignore errors
-				user.deleteFile(id)
+				if deleteError = user.deleteFile(id); deleteError != nil {
+					return
+				}
 			}
 		}()
 		wg.Done()
@@ -87,5 +90,6 @@ func (user *userData) deleteFolder(folderPath string) error {
 	close(deleteTasks)
 	wg.Wait()
 
-	return nil
+	fmt.Println("deleteError: ", deleteError)
+	return deleteError
 }
