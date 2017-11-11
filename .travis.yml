@@ -3,7 +3,8 @@ go:
  - tip
 
 before_install:
-  - openssl aes-256-cbc -K $encrypted_187f8b46a79f_key -iv $encrypted_187f8b46a79f_iv -in app/creds.json.enc -out app/creds.json -d
+  - openssl aes-256-cbc -K $encrypted_968417f7eedb_key -iv $encrypted_968417f7eedb_iv -in app/creds.json.enc -out app/creds.json -d
+
   - CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
   - echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
 
@@ -11,11 +12,11 @@ before_install:
   - sudo apt-get update && sudo apt-get install google-cloud-sdk google-cloud-sdk-datastore-emulator
   - export CLOUDSDK_CORE_PROJECT=test
   - /usr/lib/google-cloud-sdk/platform/cloud-datastore-emulator/cloud_datastore_emulator start --testing -p 8081 &
-  - sleep 2
+  - sleep 3
 
 script:
   - export GOOGLE_APPLICATION_CREDENTIALS=creds.json
-  - cd app && JWT_KEY=a DATASTORE_EMULATOR_HOST=localhost:8081 GOOGLE_CLOUD_PROJECT_ID=gscrypto-154621 GOOGLE_CLOUD_STORAGE_BUCKET=gscrypto-testing-bucket go test -cover -v -covermode=atomic -race -coverprofile=coverage.txt
+  - cd app && JWT_KEY=a DATASTORE_EMULATOR_HOST=localhost:8081 GOOGLE_CLOUD_PROJECT_ID=gcs-web-fs GOOGLE_CLOUD_STORAGE_BUCKET=gcs-web-fs-testing go test -cover -v -covermode=atomic -race -coverprofile=coverage.txt
 
 
 after_success:
