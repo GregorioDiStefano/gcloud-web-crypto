@@ -14,7 +14,7 @@ type datastoreDB struct {
 }
 
 const (
-	ErrorNoDatabaseEntryFound = "no entry found"
+	ErrorNoDatabaseEntryFound = "no entry/file found"
 	ErrorNotRequestingUsers   = "this object does not belong to the requesting user"
 )
 
@@ -130,14 +130,11 @@ func (db *datastoreDB) ListTags() ([]string, error) {
 func (db *datastoreDB) ListFilesWithTags(tags []string) ([]File, error) {
 	ctx := context.Background()
 
-	fmt.Println("tags: ", tags)
-
 	encfile := make([]File, 0)
 	q := datastore.NewQuery("FileStruct")
 
 	for _, tag := range tags {
-		fmt.Println("searching for files with tag: ", tag)
-		q = q.Filter("Tags =", tag)
+		q = q.Filter("Tags =", strings.ToLower(tag))
 	}
 
 	_, err := db.client.GetAll(ctx, q, &encfile)
@@ -233,8 +230,7 @@ func (db *datastoreDB) DeleteFolder(user string, id int64) error {
 			return errors.New(ErrorNoDatabaseEntryFound)
 		}
 	} else {
-		fmt.Println(err)
-		return nil
+		return err
 	}
 
 	err := db.client.Delete(ctx, &datastore.Key{ID: id, Kind: "FolderStruct"})

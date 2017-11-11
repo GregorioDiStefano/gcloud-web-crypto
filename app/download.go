@@ -54,51 +54,54 @@ func (user *userData) downloadFolder(httpContext gin.Context, path string) error
 
 	files := user.listAllNestedFiles(path)
 
-	httpContext.Writer.Header().Set("Content-Type", "application/zip")
-	httpContext.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipfileStr))
-	zw := zip.NewWriter(httpContext.Writer)
-	defer zw.Close()
+	if len(files) > 0 {
+		httpContext.Writer.Header().Set("Content-Type", "application/zip")
+		httpContext.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipfileStr))
+		zw := zip.NewWriter(httpContext.Writer)
+		defer zw.Close()
 
-	for _, file := range files {
-		ctx := context.Background()
-		r, err := config.storageBucket.Object(file.GoogleCloudObject).NewReader(ctx)
+		for _, file := range files {
+			ctx := context.Background()
+			r, err := config.storageBucket.Object(file.GoogleCloudObject).NewReader(ctx)
 
-		if r == nil {
-			fmt.Println(file.ID, " is nil")
-			continue
-		} else {
-			fmt.Println("filesize: ", r.Size())
+			if r == nil {
+				fmt.Println(file.ID, " is nil")
+				continue
+			} else {
+				fmt.Println("filesize: ", r.Size())
+			}
+
+			if err != nil {
+				return err
+			}
+
+			plainTextFilename, err := user.cryptoData.DecryptText(file.Filename)
+
+			if err != nil {
+				return err
+			}
+
+			header := &zip.FileHeader{
+				Name:         filepath.Join(file.Folder, string(plainTextFilename)),
+				Method:       zip.Deflate,
+				ModifiedTime: uint16(time.Now().UnixNano()),
+				ModifiedDate: uint16(time.Now().UnixNano()),
+			}
+
+			fmt.Println("File: ", header.Name, " added to zip archive")
+			fw, err := zw.CreateHeader(header)
+
+			if err != nil {
+				return err
+			}
+
+			if err := user.cryptoData.DecryptFile(r, fw); err != nil {
+				fmt.Println(err)
+				return err
+			}
 		}
-
-		if err != nil {
-			return err
-		}
-
-		plainTextFilename, err := user.cryptoData.DecryptText(file.Filename)
-
-		if err != nil {
-			return err
-		}
-
-		header := &zip.FileHeader{
-			Name:         filepath.Join(file.Folder, string(plainTextFilename)),
-			Method:       zip.Deflate,
-			ModifiedTime: uint16(time.Now().UnixNano()),
-			ModifiedDate: uint16(time.Now().UnixNano()),
-		}
-
-		fmt.Println("File: ", header.Name, " added to zip archive")
-		fw, err := zw.CreateHeader(header)
-
-		if err != nil {
-			return err
-		}
-
-		if err := user.cryptoData.DecryptFile(r, fw); err != nil {
-			fmt.Println(err)
-			return err
-		}
+		return nil
+	} else {
+		return fmt.Errorf("no files found for specified path")
 	}
-
-	return nil
 }

@@ -148,9 +148,9 @@ func (user *userData) processFileUpload(c *gin.Context) error {
 			unprocessedTags := string(tmp)
 
 			for _, tag := range strings.Split(unprocessedTags, ",") {
-				trimmedTag := strings.TrimSpace(tag)
-				if len(trimmedTag) > 0 {
-					tags = append(tags, strings.TrimSpace(tag))
+				tag := strings.ToLower(strings.TrimSpace(tag))
+				if len(tag) > 0 {
+					tags = append(tags, tag)
 				}
 			}
 		}
