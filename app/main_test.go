@@ -458,7 +458,7 @@ func TestFileIsEncrypted(t *testing.T) {
 	df, err := os.OpenFile(testfile+"-decrypted", os.O_CREATE|os.O_WRONLY, 0644)
 
 	assert.NoError(t, err, "failed to create decryption file")
-	userCrypto.DecryptFile(reader, df)
+	userCrypto.DecryptFile(reader, df, false)
 	df.Close()
 }
 

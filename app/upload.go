@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	gc "github.com/GregorioDiStefano/gcloud-web-crypto"
 	"github.com/gin-gonic/gin"
 	"github.com/satori/go.uuid"
+	"gopkg.in/h2non/filetype.v1"
 )
 
 const (
@@ -26,6 +28,7 @@ type uploadedFile struct {
 	fileID      string
 	contentType string
 	sha2        string
+	compressed  bool
 	fileSize    int64
 	fileName    string
 }
@@ -36,7 +39,7 @@ func (user *userData) isFileDuplicate(plaintextFolder, plaintextFilename string)
 	return gc.FileStructDB.FilenameHMACExists(user.userEntry.Username, hmac)
 }
 
-func (user *userData) doUpload(fileReader io.Reader, storageClass string) (string, int64, string, error) {
+func (user *userData) doUpload(fileReader io.Reader, storageClass string) (string, int64, string, bool, error) {
 	ctx := context.Background()
 	sha256hash := sha256.New()
 
@@ -47,21 +50,32 @@ func (user *userData) doUpload(fileReader io.Reader, storageClass string) (strin
 	googleStorageWrite.CacheControl = "public, max-age=86400"
 	googleStorageWrite.StorageClass = storageClass
 
-	r := io.TeeReader(fileReader, sha256hash)
+	compressable := true
+	fileBuffer := bufio.NewReader(fileReader)
+
+	if peek, _ := fileBuffer.Peek(512); len(peek) > 0 {
+		if kind, err := filetype.Match(peek); err == nil {
+			switch kind.MIME.Type {
+			case "image", "video", "audio":
+				compressable = false
+			}
+		}
+	}
+
+	r := io.TeeReader(fileBuffer, sha256hash)
 	w := io.MultiWriter(googleStorageWrite)
 
-	//	compressedRead := io.TeeReader(r, zstd.NewWriterLevel(w, zstd.BestCompression))
-	written, err := user.cryptoData.EncryptFile(r, w)
+	written, err := user.cryptoData.EncryptFile(r, w, compressable)
 
 	if err != nil {
-		return "", 0, "", err
+		return "", 0, "", compressable, err
 	}
 
 	if err := googleStorageWrite.Close(); err != nil {
-		return "", 0, "", err
+		return "", 0, "", compressable, err
 	}
 
-	return filename, written, fmt.Sprintf("%x", sha256hash.Sum(nil)), nil
+	return filename, written, fmt.Sprintf("%x", sha256hash.Sum(nil)), compressable, nil
 }
 
 func (user *userData) createFileEntry(file *uploadedFile, desc, virtualFolder, title string, tags []string) error {
@@ -82,6 +96,7 @@ func (user *userData) createFileEntry(file *uploadedFile, desc, virtualFolder, t
 			FileSize:          file.fileSize,
 			FileType:          file.contentType,
 			Description:       desc,
+			Compressed:        file.compressed,
 			Tags:              tags}
 
 		if !user.isFileDuplicate(folder, filename) {
@@ -156,7 +171,7 @@ func (user *userData) processFileUpload(c *gin.Context) error {
 		}
 
 		if p.FormName() == "file" && len(fileName) > 0 && len(contentType) > 0 {
-			fileid, filesize, sha2, err := user.doUpload(p, storageClass)
+			fileid, filesize, sha2, compressable, err := user.doUpload(p, storageClass)
 			if err != nil {
 				return err
 			} else {
@@ -165,6 +180,7 @@ func (user *userData) processFileUpload(c *gin.Context) error {
 						contentType: contentType,
 						fileSize:    filesize,
 						sha2:        sha2,
+						compressed:  compressable,
 						fileName:    fileName})
 			}
 		}

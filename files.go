@@ -18,6 +18,7 @@ type File struct {
 	Downloads         int64
 	Description       string
 	Tags              []string
+	Compressed        bool
 	SHA2              string
 }
 

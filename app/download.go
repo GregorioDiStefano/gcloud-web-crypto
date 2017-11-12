@@ -40,7 +40,13 @@ func (user *userData) downloadFile(httpContext *gin.Context, id int64) error {
 		httpContext.Writer.Header().Set("content-disposition", "attachment; filename=\""+string(plainTextFilename)+"\"")
 	}
 
-	if err := user.cryptoData.DecryptFile(r, httpContext.Writer); err != nil {
+	f, err := gc.FileStructDB.GetFile(user.userEntry.Username, id)
+
+	if err != nil {
+		return err
+	}
+
+	if err := user.cryptoData.DecryptFile(r, httpContext.Writer, f.Compressed); err != nil {
 		return err
 	}
 
@@ -95,7 +101,7 @@ func (user *userData) downloadFolder(httpContext gin.Context, path string) error
 				return err
 			}
 
-			if err := user.cryptoData.DecryptFile(r, fw); err != nil {
+			if err := user.cryptoData.DecryptFile(r, fw, file.Compressed); err != nil {
 				fmt.Println(err)
 				return err
 			}

@@ -11,10 +11,10 @@ import (
 	"golang.org/x/crypto/openpgp/packet"
 )
 
-var packetConfig packet.Config
+var packetConfigCompression, packetConfigNoCompression packet.Config
 
 func init() {
-	packetConfig = packet.Config{
+	packetConfigCompression = packet.Config{
 		DefaultHash:            crypto.SHA256,
 		DefaultCipher:          packet.CipherAES256,
 		DefaultCompressionAlgo: packet.CompressionZIP,
@@ -23,11 +23,25 @@ func init() {
 		},
 	}
 
+	packetConfigNoCompression = packet.Config{
+		DefaultHash:            crypto.SHA256,
+		DefaultCipher:          packet.CipherAES256,
+		DefaultCompressionAlgo: packet.CompressionNone,
+	}
+
 	log.SetLevel(log.DebugLevel)
 }
 
-func (c *CryptoData) EncryptFile(src io.Reader, w io.Writer) (written int64, err error) {
+func (c *CryptoData) EncryptFile(src io.Reader, w io.Writer, compress bool) (written int64, err error) {
 	password := c.SymmetricKey
+	var packetConfig packet.Config
+
+	if !compress {
+		packetConfig = packetConfigNoCompression
+	} else {
+		packetConfig = packetConfigCompression
+	}
+
 	log.WithFields(log.Fields{"key": base64.StdEncoding.EncodeToString(c.SymmetricKey)}).Debug("encrypting")
 	cipherText, err := openpgp.SymmetricallyEncrypt(w, password, nil, &packetConfig)
 
@@ -48,9 +62,16 @@ func (c *CryptoData) EncryptFile(src io.Reader, w io.Writer) (written int64, err
 	return
 }
 
-func (c *CryptoData) DecryptFile(r io.Reader, w io.Writer) (err error) {
+func (c *CryptoData) DecryptFile(r io.Reader, w io.Writer, compressed bool) (err error) {
+	var packetConfig packet.Config
 	password := c.SymmetricKey
 	failed := false
+
+	if !compressed {
+		packetConfig = packetConfigNoCompression
+	} else {
+		packetConfig = packetConfigCompression
+	}
 
 	log.WithFields(log.Fields{"key": base64.StdEncoding.EncodeToString(c.SymmetricKey)}).Debug("decrypting")
 	prompt := func(keys []openpgp.Key, symmetric bool) ([]byte, error) {
