@@ -3,6 +3,8 @@ package gscrypto
 import (
 	"strings"
 	"time"
+
+	"cloud.google.com/go/datastore"
 )
 
 type File struct {
@@ -38,6 +40,7 @@ type FileDatabase interface {
 
 	ListFolders(user, path string) ([]FolderTree, int64, error)
 	ListAllFolders(user, path string, limit int) ([]string, error)
+	GetAllFilesMatchingFolder(string, string) ([]*File, []*datastore.Key, error)
 	// FolderTree contains a username
 	AddFolder(f *FolderTree) (int64, error)
 

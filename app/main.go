@@ -346,6 +346,7 @@ func mainGinEngine() *gin.Engine {
 			c.JSON(http.StatusForbidden, err.Error())
 			return
 		}
+
 		c.Status(http.StatusNoContent)
 	})
 
@@ -436,6 +437,27 @@ func mainGinEngine() *gin.Engine {
 		if err := user.downloadFile(c, id); err != nil {
 			c.JSON(http.StatusNotFound, err)
 			return
+		}
+	})
+
+	private.PATCH("/folder/", func(c *gin.Context) {
+		type Payload struct {
+			OldFolder string `json:"src"`
+			NewFolder string `json:"dst"`
+		}
+
+		user := getUserFromContext(c)
+
+		var p *Payload
+		c.BindJSON(&p)
+
+		p.NewFolder = normalizeFolder(p.NewFolder)
+		p.OldFolder = normalizeFolder(p.OldFolder)
+
+		if finalFolder, err := user.renameFolder(p.OldFolder, p.NewFolder); err == nil {
+			user.createDirectoryTree(normalizeFolder(finalFolder))
+		} else {
+			c.JSON(http.StatusConflict, err)
 		}
 	})
 

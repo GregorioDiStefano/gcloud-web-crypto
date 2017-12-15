@@ -666,6 +666,158 @@ func TestGetUsers(t *testing.T) {
 	}
 }
 
+func TestRenameFolder(t *testing.T) {
+	type upload struct {
+		filename string
+		path     string
+	}
+
+	type mv struct {
+		sourceFolder string
+		distFolder   string
+	}
+
+	type fs struct {
+		_type string
+		path  string
+	}
+
+	type testCase struct {
+		uploads      []upload
+		moveSrcDst   mv
+		outcome      []fs
+		returnsError int
+	}
+
+	testCases := []testCase{
+		{
+			uploads: []upload{
+				upload{filename: "a", path: "/a/b/c/"},
+				upload{filename: "b", path: "/a/b/c/"},
+				upload{filename: "c", path: "/a/b/c/"},
+			},
+			moveSrcDst: mv{sourceFolder: "/a/b/", distFolder: "/x/"},
+			outcome: []fs{
+				fs{path: "/x/c/a", _type: "filename"},
+				fs{path: "/x/c/b", _type: "filename"},
+				fs{path: "/x/c/c", _type: "filename"},
+				fs{path: "/x/", _type: "folder"},
+				fs{path: "/x/c/", _type: "folder"},
+			},
+		},
+		{
+			uploads: []upload{
+				upload{filename: "a", path: "/a/b/c/"},
+				upload{filename: "b", path: "/a/b/c/"},
+				upload{filename: "c", path: "/a/b/c/"},
+			},
+			moveSrcDst: mv{sourceFolder: "/a/b/c/", distFolder: "/x/"},
+			outcome: []fs{
+				fs{path: "/x/a", _type: "filename"},
+				fs{path: "/x/b", _type: "filename"},
+				fs{path: "/x/c", _type: "filename"},
+				fs{path: "/x/", _type: "folder"},
+			},
+		},
+		{
+			uploads: []upload{
+				upload{filename: "a", path: "/a/b/c/"},
+				upload{filename: "bar", path: "/a/b/bar/"},
+				upload{filename: "b", path: "/a/b/c/"},
+				upload{filename: "c", path: "/a/b/c/"},
+				upload{filename: "d", path: "/a/b/c/d/"},
+			},
+			moveSrcDst: mv{sourceFolder: "/a/b/bar/", distFolder: "/x/"},
+			outcome: []fs{
+				fs{path: "/a/b/c/a", _type: "filename"},
+				fs{path: "/a/b/c/b", _type: "filename"},
+				fs{path: "/a/b/c/c", _type: "filename"},
+				fs{path: "/a/b/c/d/d", _type: "filename"},
+				fs{path: "/x/bar", _type: "filename"},
+				fs{path: "/x/", _type: "folder"},
+				fs{path: "/a/", _type: "folder"},
+				fs{path: "/a/b/", _type: "folder"},
+				fs{path: "/a/b/c/", _type: "folder"},
+				fs{path: "/a/b/c/d/", _type: "folder"},
+			},
+		},
+		{
+			uploads: []upload{
+				upload{filename: "a", path: "/a/b/"},
+				upload{filename: "b", path: "/a/b/c/"},
+			},
+			moveSrcDst: mv{sourceFolder: "/a/b/", distFolder: "/"},
+			outcome: []fs{
+				fs{path: "/a", _type: "filename"},
+				fs{path: "/c/b", _type: "filename"},
+				fs{path: "/c/", _type: "folder"},
+			},
+		},
+		{
+			uploads: []upload{
+				upload{filename: "a", path: "/a/b/"},
+				upload{filename: "b", path: "/a/b/c/"},
+			},
+			moveSrcDst: mv{sourceFolder: "/x/", distFolder: "/"},
+			outcome: []fs{
+				fs{path: "/a", _type: "filename"},
+				fs{path: "/c/b", _type: "filename"},
+				fs{path: "/c/", _type: "folder"},
+			},
+			returnsError: http.StatusConflict,
+		},
+	}
+
+	for _, test := range testCases {
+		clearDatastore()
+		createAdmin()
+
+		cookie := loginUser(adminLoginDetails)
+
+		for _, f := range test.uploads {
+			testfile, _ := createTestFile(f.filename, 1)
+			defer os.Remove(testfile)
+
+			uploadFile, err := grequests.FileUploadFromDisk(testfile)
+
+			resp, err := grequests.Post(ts.URL+"/auth/file", &grequests.RequestOptions{Cookies: []*http.Cookie{cookie},
+				Files: uploadFile, Data: map[string]string{"filename": f.filename, "virtfolder": f.path}})
+
+			assert.Equal(t, http.StatusCreated, resp.StatusCode, "failed to upload file to backend successfully")
+
+			if err != nil {
+				t.Fatalf("failed to upload test file with: " + err.Error())
+			}
+		}
+
+		resp, err := grequests.Patch(ts.URL+"/auth/folder", &grequests.RequestOptions{Cookies: []*http.Cookie{cookie},
+			JSON: map[string]string{"src": test.moveSrcDst.sourceFolder, "dst": test.moveSrcDst.distFolder}})
+
+		if err != nil {
+			panic(err)
+		}
+
+		if test.returnsError != 0 {
+			assert.Equal(t, test.returnsError, resp.StatusCode)
+			break
+		}
+
+		files := getAllFSObjectsUsingAPI("/", cookie)
+		assert.Len(t, files, len(test.outcome))
+
+		count := 0
+		for _, actualFile := range files {
+			for _, expectedFile := range test.outcome {
+				if expectedFile.path == actualFile.Fullpath &&
+					expectedFile._type == actualFile.Type {
+					count++
+				}
+			}
+		}
+		assert.Equal(t, len(test.outcome), count)
+	}
+}
+
 //TODO: make sure to make some requests with a broken/non-existant context
 func TestGetUserFromContext(t *testing.T) {
 	type testCase struct {

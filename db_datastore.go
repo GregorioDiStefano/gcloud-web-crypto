@@ -3,6 +3,7 @@ package gscrypto
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"cloud.google.com/go/datastore"
@@ -318,6 +319,17 @@ func (db *datastoreDB) GetAllFiles(user string) ([]*File, error) {
 	return encfile, err
 }
 
+func (db *datastoreDB) GetAllFilesMatchingFolder(user, folder string) ([]*File, []*datastore.Key, error) {
+	ctx := context.Background()
+
+	files := make([]*File, 0)
+	q := datastore.NewQuery("FileStruct")
+	q = q.Filter("Username =", user).Filter("Folder >=", folder)
+	keys, err := db.client.GetAll(ctx, q, &files)
+
+	return files, keys, err
+}
+
 func (db *datastoreDB) ListAllFolders(user, search string, limit int) ([]string, error) {
 	ctx := context.Background()
 
@@ -333,6 +345,97 @@ func (db *datastoreDB) ListAllFolders(user, search string, limit int) ([]string,
 		}
 	}
 
-	fmt.Println("matching folders: ", matchingFolders)
 	return matchingFolders, err
+}
+
+func (db *datastoreDB) List(user string) {
+	ctx := context.Background()
+
+	//	matchingFolders := make([]string, 0)
+	file := make([]*File, 0)
+
+	q := datastore.NewQuery("FileStruct")
+	q = q.Filter("Folder >=", "")
+	db.client.GetAll(ctx, q, &file)
+	fmt.Println("---------------------------")
+	for _, f := range file {
+		fmt.Println(f)
+	}
+	fmt.Println("---------------------------")
+}
+
+func (db *datastoreDB) RenameFolder(user, oldFolder, newFolder string) (string, error) {
+	ctx := context.Background()
+
+	finalFolderPath := newFolder
+	file := make([]*File, 0)
+
+	q := datastore.NewQuery("FileStruct")
+	q = q.Filter("Username =", user).Filter("Folder >=", oldFolder)
+
+	keys, err := db.client.GetAll(ctx, q, &file)
+
+	if err != nil {
+		return "", err
+	}
+
+	for idx, f := range file {
+
+		orgKey := keys[idx].ID
+
+		k := datastore.IncompleteKey("FileStruct", nil)
+
+		// replace full directory
+		if f.Folder == oldFolder {
+			f.Folder = newFolder
+		} else {
+			/*
+				replace sub folder:
+
+					oldFolder=/foo/bar/
+					newFolder=/bar/
+
+					but we get files, with full paths:
+
+					/foo/bar/a/1
+					/foo/bar/b/2
+			*/
+
+			oldFolderPaths := strings.Split(strings.Trim(oldFolder, "/"), "/")
+			newFolderPaths := strings.Split(strings.Trim(newFolder, "/"), "/")
+			filePaths := strings.Split(strings.Trim(f.Folder, "/"), "/")
+
+			if len(newFolderPaths) == 0 {
+				return "", fmt.Errorf("invalid destination folder")
+			}
+
+			match := true
+
+			if len(filePaths) < len(oldFolderPaths) {
+				fmt.Println(filePaths, "is less than", oldFolderPaths)
+				match = false
+			} else {
+				for idx, dir := range oldFolderPaths {
+					if filePaths[idx] != dir {
+						match = false
+					}
+				}
+			}
+
+			if match {
+				finalFolderPath = filepath.Clean(newFolder + "/" + strings.TrimPrefix(f.Folder, oldFolder))
+				finalFolderPath += "/"
+				fmt.Println("final folder: ", finalFolderPath)
+				f.Folder = finalFolderPath
+			}
+
+		}
+
+		if key, err := db.client.Put(ctx, k, f); err == nil {
+			fmt.Println(key)
+		}
+
+		db.client.Delete(ctx, &datastore.Key{ID: orgKey, Kind: "FileStruct"})
+	}
+	return finalFolderPath, nil
 }
